@@ -1,0 +1,20 @@
+version = '1.0-SNAPSHOT'
+group = 'org.catarachtsoftware.datasponge'
+
+
+apply plugin: 'java'
+//this gives us the "install" goal
+apply plugin: 'maven'
+
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'net.sourceforge.htmlunit:htmlunit:2.13'
+    compile 'org.slf4j:slf4j-api:1.7.5'
+    compile 'org.slf4j:jcl-over-slf4j:1.7.5'
+    compile 'ch.qos.logback:logback-classic:1.0.13'
+    testCompile 'junit:junit:4.11'
+}

@@ -1,5 +1,9 @@
 *.class
 
+# intellij files #
+*.iml
+*.idea
+
 # Package Files #
 *.jar
 *.war
