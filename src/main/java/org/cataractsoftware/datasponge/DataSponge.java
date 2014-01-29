@@ -40,6 +40,7 @@ public class DataSponge {
     private String proxy;
     private int port;
 
+
     /**
      * constructs a new object using the properties loaded into p
      *
@@ -47,8 +48,58 @@ public class DataSponge {
      */
     public DataSponge(Properties p) {
         props = p;
-        init();
     }
+
+    /**
+     * default constructor. If this is uses, all config options needs to be set prior to calling the executeCrawl method.
+     */
+    public DataSponge() {
+        props = new Properties();
+    }
+
+    public void setMaxThreads(int threads) {
+        props.setProperty(MAXTHREADS, String.valueOf(threads));
+    }
+
+    public void setProxy(String host, int port) {
+        props.setProperty(PROXYHOST, host);
+        props.setProperty(PROXYPORT, String.valueOf(port));
+    }
+
+    public void setStartUrls(String urlList) {
+        props.setProperty(STARTURLS, urlList);
+    }
+
+    public void setSleepInterval(int intervalMillis) {
+        props.setProperty(INTERVAL, String.valueOf(intervalMillis));
+    }
+
+    public void setIncludePatterns(String patterns){
+        props.setProperty(INCLUDES,patterns);
+    }
+
+    public void setExcludePatterns(String patterns){
+        props.setProperty(IGNOREPATTERNS,patterns);
+    }
+
+    public void setWriterClass(String className){
+        props.setProperty(DATAWRITER,className);
+    }
+
+    public void setExtractorClass(String className){
+        props.setProperty(DATAEXTRACTOR,className);
+    }
+
+    /**
+     * sets additional properties (use if you need to set properties needed by custom extractors/writers)
+     *
+     * @param name
+     * @param value
+     */
+    public void setProperty(String name, String value) {
+        props.setProperty(name, value);
+    }
+
 
     /**
      * main method for this program. It checks the command line arguments and,
@@ -93,6 +144,7 @@ public class DataSponge {
      * program will terminate.
      */
     private void executeCrawl() {
+        init();
         long startTime = System.currentTimeMillis();
         int threadCount = 5;
         if (props.getProperty(MAXTHREADS) != null) {
