@@ -9,17 +9,22 @@ import java.util.Set;
  *
  * @author Christopher Fagiani
  */
-public class DataRecord<T> implements Comparable<DataRecord<T>> {
+public class DataRecord {
     private String identifier;
+    private String type;
 
-    private Map<String, T> fields;
+    private Map<String, Object> fields;
 
-    public DataRecord(String identifier) {
+    public DataRecord(String identifier, String type) {
         if (identifier == null) {
             throw new IllegalArgumentException("Cannot have null identifier");
         }
+        if (type == null) {
+            throw new IllegalArgumentException("Cannot have null type");
+        }
         this.identifier = identifier;
-        fields = new HashMap<String, T>();
+        this.type = type;
+        fields = new HashMap<String, Object>();
     }
 
     public String getIdentifier() {
@@ -30,11 +35,11 @@ public class DataRecord<T> implements Comparable<DataRecord<T>> {
         this.identifier = identifier;
     }
 
-    public void setField(String name, T val) {
+    public void setField(String name, Object val) {
         fields.put(name, val);
     }
 
-    public T getFieldValue(String name) {
+    public Object getFieldValue(String name) {
         return fields.get(name);
     }
 
@@ -42,8 +47,16 @@ public class DataRecord<T> implements Comparable<DataRecord<T>> {
         return fields.size();
     }
 
-    public Set<Map.Entry<String, T>> getFields() {
+    public Set<Map.Entry<String, Object>> getFields() {
         return fields.entrySet();
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 
     @Override
@@ -54,21 +67,15 @@ public class DataRecord<T> implements Comparable<DataRecord<T>> {
         DataRecord that = (DataRecord) o;
 
         if (!identifier.equals(that.identifier)) return false;
+        if (!type.equals(that.type)) return false;
 
         return true;
     }
 
     @Override
     public int hashCode() {
-        return identifier.hashCode();
-    }
-
-    @Override
-    public int compareTo(DataRecord<T> o) {
-        if (o == this) {
-            return 0;
-        } else {
-            return getIdentifier().compareTo(o.getIdentifier());
-        }
+        int result = identifier.hashCode();
+        result = 31 * result + type.hashCode();
+        return result;
     }
 }

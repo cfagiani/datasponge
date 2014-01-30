@@ -9,7 +9,7 @@ import org.cataractsoftware.datasponge.DataRecord;
  *
  * @author Christopher Fagiani
  */
-public interface DataExtractor<T> extends DataAdapter {
+public interface DataExtractor extends DataAdapter {
 
     /**
      * implementations should return a new DataRecord object populated with data extracted from the page
@@ -18,5 +18,5 @@ public interface DataExtractor<T> extends DataAdapter {
      * @param page page to process
      * @return DataRecord object containing data extracted from the page
      */
-    public DataRecord<T> extractData(String url, HtmlPage page);
+    public DataRecord extractData(String url, HtmlPage page);
 }

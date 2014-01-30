@@ -74,20 +74,20 @@ public class DataSponge {
         props.setProperty(INTERVAL, String.valueOf(intervalMillis));
     }
 
-    public void setIncludePatterns(String patterns){
-        props.setProperty(INCLUDES,patterns);
+    public void setIncludePatterns(String patterns) {
+        props.setProperty(INCLUDES, patterns);
     }
 
-    public void setExcludePatterns(String patterns){
-        props.setProperty(IGNOREPATTERNS,patterns);
+    public void setExcludePatterns(String patterns) {
+        props.setProperty(IGNOREPATTERNS, patterns);
     }
 
-    public void setWriterClass(String className){
-        props.setProperty(DATAWRITER,className);
+    public void setWriterClass(String className) {
+        props.setProperty(DATAWRITER, className);
     }
 
-    public void setExtractorClass(String className){
-        props.setProperty(DATAEXTRACTOR,className);
+    public void setExtractorClass(String className) {
+        props.setProperty(DATAEXTRACTOR, className);
     }
 
     /**
@@ -143,7 +143,7 @@ public class DataSponge {
      * once the threads are all idle, the collector will be closed and the
      * program will terminate.
      */
-    private void executeCrawl() {
+    public void executeCrawl() {
         init();
         long startTime = System.currentTimeMillis();
         int threadCount = 5;
@@ -171,7 +171,7 @@ public class DataSponge {
         outputCollector.finish();
 
         long totalTime = System.currentTimeMillis() - startTime;
-        System.out.println("Crawl took " + (totalTime / 1000) + " seconds");
+        logger.info("Crawl took {} seconds", (totalTime / 1000));
     }
 
     /**

@@ -15,7 +15,7 @@ import java.util.Properties;
  *
  * @author Christopher Fagiani
  */
-public class GroovyExtractor implements DataExtractor<String> {
+public class GroovyExtractor implements DataExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(GroovyExtractor.class);
     private static final String PROP_NAME = "groovyextractorclass";
@@ -23,7 +23,7 @@ public class GroovyExtractor implements DataExtractor<String> {
     private GroovyObject groovyObject;
 
 
-    public DataRecord<String> extractData(String url, HtmlPage page) {
+    public DataRecord extractData(String url, HtmlPage page) {
         return (DataRecord) groovyObject.invokeMethod("extractData", new Object[]{url, page});
     }
 
@@ -37,6 +37,8 @@ public class GroovyExtractor implements DataExtractor<String> {
         try {
             ClassLoader parent = getClass().getClassLoader();
             GroovyClassLoader loader = new GroovyClassLoader(parent);
+
+
             File classFile = new File(val);
             Class groovyClass = loader.parseClass(classFile);
             groovyObject = (GroovyObject) groovyClass.newInstance();

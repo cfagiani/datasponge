@@ -14,12 +14,12 @@ import java.util.Properties;
  *
  * @author Christopher Fagiani
  */
-public class HyperlinkExtractor implements DataExtractor<String> {
+public class HyperlinkExtractor implements DataExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(HyperlinkExtractor.class);
 
-    public DataRecord<String> extractData(String url, HtmlPage page) {
-        DataRecord<String> record = new DataRecord<String>(url);
+    public DataRecord extractData(String url, HtmlPage page) {
+        DataRecord record = new DataRecord(url, "linklist");
         try {
             NodeList nl = page.getElementsByTagName("a");
             if (nl != null) {
