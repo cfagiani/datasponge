@@ -2,6 +2,7 @@ package org.cataractsoftware.datasponge;
 
 import org.cataractsoftware.datasponge.crawler.CrawlerWorkqueue;
 import org.cataractsoftware.datasponge.crawler.SpiderThread;
+import org.cataractsoftware.datasponge.enhancer.DataEnhancer;
 import org.cataractsoftware.datasponge.extractor.DataExtractor;
 import org.cataractsoftware.datasponge.writer.DataWriter;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ public class DataSponge {
     private static final String INTERVAL = "sleepinterval";
     private static final String INCLUDES = "includepatterns";
     private static final String DATAEXTRACTOR = "dataextractor";
+    private static final String DATAENHANCER = "dataenhancer";
     private static final String DATAWRITER = "datawriter";
     private Properties props;
     private CrawlerWorkqueue queue;
@@ -153,9 +155,11 @@ public class DataSponge {
 
         DataWriter outputCollector = getNewDataAdapter(props.getProperty(DATAWRITER), props);
         DataExtractor extractor = getNewDataAdapter(props.getProperty(DATAEXTRACTOR), props);
+        //TODO: handle list of enhancers
+        DataEnhancer enhancer = getNewDataAdapter(props.getProperty(DATAENHANCER),props);
 
         List<SpiderThread> threadList = spawnThreads(threadCount,
-                outputCollector, extractor);
+                outputCollector, extractor, enhancer);
 
         while (areStillWorking(threadList)) {
             try {
@@ -209,14 +213,15 @@ public class DataSponge {
      * @param threadCount     number of threads to spawn
      * @param outputCollector initialized DataWriter instance that will collect data as it is discovered
      * @param extractor       initialized DataExtractor instance that will extract data from each page
+     * @param enhancers       optional list of data enhancers
      * @return - list of running threads
      */
     private List<SpiderThread> spawnThreads(int threadCount,
-                                            DataWriter outputCollector, DataExtractor extractor) {
+                                            DataWriter outputCollector, DataExtractor extractor, DataEnhancer... enhancers) {
         List<SpiderThread> threadList = new ArrayList<SpiderThread>();
         for (int i = 0; i < threadCount; i++) {
             SpiderThread st = new SpiderThread(proxy, port, outputCollector,
-                    extractor);
+                    extractor, enhancers);
             threadList.add(st);
             Thread t = new Thread(st);
             t.start();

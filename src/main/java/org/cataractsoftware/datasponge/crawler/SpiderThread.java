@@ -6,6 +6,7 @@ import com.gargoylesoftware.htmlunit.WebClient;
 import com.gargoylesoftware.htmlunit.html.HtmlAnchor;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import org.cataractsoftware.datasponge.DataRecord;
+import org.cataractsoftware.datasponge.enhancer.DataEnhancer;
 import org.cataractsoftware.datasponge.extractor.DataExtractor;
 import org.cataractsoftware.datasponge.writer.DataWriter;
 import org.slf4j.Logger;
@@ -38,6 +39,7 @@ public class SpiderThread implements Runnable {
     public static final int MAX_IDLE_ITERATIONS = 2;
     public static final int BACKOFF_INTERVAL = 10000;
     private DataExtractor extractor;
+    private DataEnhancer[] dataEnhancers;
 
     public boolean isBusy() {
         return busy;
@@ -51,9 +53,10 @@ public class SpiderThread implements Runnable {
      * @param proxy     proxy host
      * @param port      proxy port
      * @param collector initialized DataWriter instance
+     * @param enhancers optional array of data enhancers
      */
     public SpiderThread(String proxy, int port, DataWriter collector,
-                        DataExtractor extractor) {
+                        DataExtractor extractor, DataEnhancer... enhancers) {
         this.proxy = proxy;
         this.port = port;
 
@@ -61,6 +64,7 @@ public class SpiderThread implements Runnable {
         this.extractor = extractor;
         busy = true;
         outputCollector = collector;
+        dataEnhancers = enhancers;
 
     }
 
@@ -97,6 +101,11 @@ public class SpiderThread implements Runnable {
                     extractLinks(page, url);
                     DataRecord dr = extractor.extractData(url, page);
                     if (dr != null) {
+                        if (dataEnhancers != null) {
+                            for (DataEnhancer enhancer : dataEnhancers) {
+                                dr = enhancer.enhanceData(dr);
+                            }
+                        }
                         outputCollector.addItem(dr);
                     }
 
