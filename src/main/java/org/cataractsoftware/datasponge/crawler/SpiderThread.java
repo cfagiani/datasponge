@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -99,14 +100,19 @@ public class SpiderThread implements Runnable {
                     final HtmlPage page = webClient.getPage(url);
 
                     extractLinks(page, url);
-                    DataRecord dr = extractor.extractData(url, page);
-                    if (dr != null) {
-                        if (dataEnhancers != null) {
-                            for (DataEnhancer enhancer : dataEnhancers) {
-                                dr = enhancer.enhanceData(dr);
+                    Collection<DataRecord> drColl = extractor.extractData(url, page);
+                    if (drColl != null) {
+
+                        for (DataRecord dr : drColl) {
+                            if (dataEnhancers != null) {
+                                for (DataEnhancer enhancer : dataEnhancers) {
+                                    if(enhancer != null) {
+                                        dr = enhancer.enhanceData(dr);
+                                    }
+                                }
                             }
+                            outputCollector.addItem(dr);
                         }
-                        outputCollector.addItem(dr);
                     }
 
                 } else {

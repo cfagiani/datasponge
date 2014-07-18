@@ -166,6 +166,16 @@ public class CrawlerWorkqueue {
         return matches;
     }
 
+    public void reset() {
+        if (processedUrls != null) {
+            processedUrls.clear();
+
+        }
+        if (queue != null) {
+            queue.clear();
+        }
+    }
+
     /**
      * pops the item off the head of the queue. If the queue is empty, this will
      * return null. NOTE: this is different than the normal behavior of the Java

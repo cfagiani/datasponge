@@ -4,6 +4,8 @@ import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.util.GroovyDataAdapter;
 
+import java.util.Collection;
+
 /**
  * this data extractor uses loads a groovy class from the file specified in groovyextractorclass property and uses it to parse the page
  *
@@ -14,8 +16,8 @@ public class GroovyExtractor extends GroovyDataAdapter implements DataExtractor 
     private static final String PROP_NAME = "groovyextractorclass";
 
 
-    public DataRecord extractData(String url, HtmlPage page) {
-        return (DataRecord) getGroovyObject().invokeMethod("extractData", new Object[]{url, page});
+    public Collection<DataRecord> extractData(String url, HtmlPage page) {
+        return (Collection<DataRecord>) getGroovyObject().invokeMethod("extractData", new Object[]{url, page});
     }
 
     @Override

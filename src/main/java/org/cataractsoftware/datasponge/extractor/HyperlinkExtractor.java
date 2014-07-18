@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Properties;
 
 /**
@@ -18,7 +20,7 @@ public class HyperlinkExtractor implements DataExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(HyperlinkExtractor.class);
 
-    public DataRecord extractData(String url, HtmlPage page) {
+    public Collection<DataRecord> extractData(String url, HtmlPage page) {
         DataRecord record = new DataRecord(url, "linklist");
         try {
             NodeList nl = page.getElementsByTagName("a");
@@ -34,7 +36,7 @@ public class HyperlinkExtractor implements DataExtractor {
         } catch (Exception e) {
             logger.error("Could not parse page", e);
         }
-        return record;
+        return Arrays.asList(record);
     }
 
     @Override

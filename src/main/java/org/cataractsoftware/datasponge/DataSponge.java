@@ -36,11 +36,17 @@ public class DataSponge {
     private static final String DATAEXTRACTOR = "dataextractor";
     private static final String DATAENHANCER = "dataenhancer";
     private static final String DATAWRITER = "datawriter";
+    private static final String MODE = "mode";
+    private static final String CRAWLINTERVAL = "crawlinterval";
+    private static final String CONTINUOUS_MODE = "continuous";
+    private static final String SINGLE_MODE = "once";
     private Properties props;
     private CrawlerWorkqueue queue;
     private long sleepInterval;
     private String proxy;
     private int port;
+    private String mode = SINGLE_MODE;
+    private long crawlIntervalSeconds = 600;
 
 
     /**
@@ -153,29 +159,45 @@ public class DataSponge {
             threadCount = Integer.parseInt(props.getProperty(MAXTHREADS));
         }
 
-        DataWriter outputCollector = getNewDataAdapter(props.getProperty(DATAWRITER), props);
         DataExtractor extractor = getNewDataAdapter(props.getProperty(DATAEXTRACTOR), props);
-        //TODO: handle list of enhancers
-        DataEnhancer enhancer = getNewDataAdapter(props.getProperty(DATAENHANCER),props);
+        boolean done = false;
+        while (!done) {
+            long iterStartTime = System.currentTimeMillis();
+            DataWriter outputCollector = getNewDataAdapter(props.getProperty(DATAWRITER), props);
 
-        List<SpiderThread> threadList = spawnThreads(threadCount,
-                outputCollector, extractor, enhancer);
+            //TODO: handle list of enhancers
+            DataEnhancer enhancer = getNewDataAdapter(props.getProperty(DATAENHANCER), props);
 
-        while (areStillWorking(threadList)) {
-            try {
-                writeIncrementalOutput(outputCollector);
-                Thread.sleep(sleepInterval);
-            } catch (InterruptedException e) {
-                logger.error("thread interrupted", e);
-            } catch (IOException e) {
-                logger.error("Couldn't write incremental output", e);
+            seedQueue(queue, parseList(props.getProperty(STARTURLS)));
+
+
+            List<SpiderThread> threadList = spawnThreads(threadCount,
+                    outputCollector, extractor, enhancer);
+
+            while (areStillWorking(threadList)) {
+                try {
+                    writeIncrementalOutput(outputCollector);
+                    Thread.sleep(sleepInterval);
+                } catch (InterruptedException e) {
+                    logger.error("thread interrupted", e);
+                } catch (IOException e) {
+                    logger.error("Couldn't write incremental output", e);
+                }
+            }
+            outputCollector.finish();
+            logger.info("Crawl iteration took {} seconds", ((System.currentTimeMillis() - iterStartTime) / 1000));
+            if (SINGLE_MODE.equalsIgnoreCase(mode)) {
+                done = true;
+            } else {
+                try {
+                    Thread.sleep(crawlIntervalSeconds * 1000);
+                } catch (InterruptedException iEx) {
+                    logger.error("Thread interrupt while sleeping between crawl iterations", iEx);
+                }
             }
         }
-
-        outputCollector.finish();
-
         long totalTime = System.currentTimeMillis() - startTime;
-        logger.info("Crawl took {} seconds", (totalTime / 1000));
+        logger.info("Crawl ran for {} seconds", (totalTime / 1000));
     }
 
     /**
@@ -248,7 +270,8 @@ public class DataSponge {
             queue = CrawlerWorkqueue.createInstance(parseList(props
                     .getProperty(IGNOREPATTERNS)), parseList(props
                     .getProperty(INCLUDES)));
-            seedQueue(queue, parseList(props.getProperty(STARTURLS)));
+            mode = props.getProperty(MODE, SINGLE_MODE);
+            crawlIntervalSeconds = Long.parseLong(props.getProperty(CRAWLINTERVAL, "600"));
         } catch (Exception e) {
             logger.error("Could not initialize the system.", e);
             System.exit(1);
@@ -304,6 +327,7 @@ public class DataSponge {
      * @param list  list of urls to add to queue
      */
     private static void seedQueue(CrawlerWorkqueue queue, HashSet<String> list) {
+        queue.reset();
         if (list != null) {
             for (String item : list) {
                 queue.enqueue(item, null);
@@ -321,15 +345,17 @@ public class DataSponge {
      */
     @SuppressWarnings("unchecked")
     private <T extends DataAdapter> T getNewDataAdapter(String className, Properties props) {
-        try {
-            Class writerClass = Class.forName(className);
-            T adapter = (T) writerClass.newInstance();
-            adapter.init(props);
-            return adapter;
-        } catch (ReflectiveOperationException ex) {
-            throw new RuntimeException("Could not instantiate " + className + " as DataAdapter. Ensure " + DATAWRITER + " property is a fully qualified class name and it is on the classpath", ex);
+        if (className != null && className.trim().length() > 0) {
+            try {
+                Class writerClass = Class.forName(className);
+                T adapter = (T) writerClass.newInstance();
+                adapter.init(props);
+                return adapter;
+            } catch (ReflectiveOperationException ex) {
+                throw new RuntimeException("Could not instantiate " + className + " as DataAdapter. Ensure " + DATAWRITER + " property is a fully qualified class name and it is on the classpath", ex);
+            }
+        } else {
+            return null;
         }
     }
-
-
 }
