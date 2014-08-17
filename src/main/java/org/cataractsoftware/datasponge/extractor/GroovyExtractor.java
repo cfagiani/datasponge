@@ -1,5 +1,6 @@
 package org.cataractsoftware.datasponge.extractor;
 
+import com.gargoylesoftware.htmlunit.Page;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.util.GroovyDataAdapter;
@@ -16,7 +17,7 @@ public class GroovyExtractor extends GroovyDataAdapter implements DataExtractor 
     private static final String PROP_NAME = "groovyextractorclass";
 
 
-    public Collection<DataRecord> extractData(String url, HtmlPage page) {
+    public Collection<DataRecord> extractData(String url, Page page) {
         return (Collection<DataRecord>) getGroovyObject().invokeMethod("extractData", new Object[]{url, page});
     }
 

@@ -1,5 +1,6 @@
 package org.cataractsoftware.datasponge.extractor;
 
+import com.gargoylesoftware.htmlunit.Page;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.slf4j.Logger;
@@ -20,16 +21,18 @@ public class HyperlinkExtractor implements DataExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(HyperlinkExtractor.class);
 
-    public Collection<DataRecord> extractData(String url, HtmlPage page) {
+    public Collection<DataRecord> extractData(String url, Page page) {
         DataRecord record = new DataRecord(url, "linklist");
         try {
-            NodeList nl = page.getElementsByTagName("a");
-            if (nl != null) {
-                for (int i = 0; i < nl.getLength(); i++) {
-                    Node node = nl.item(i).getAttributes().getNamedItem(
-                            "href");
-                    if (node != null) {
-                        record.setField("link" + i, node.getNodeValue());
+            if (page.isHtmlPage()) {
+                NodeList nl = ((HtmlPage) page).getElementsByTagName("a");
+                if (nl != null) {
+                    for (int i = 0; i < nl.getLength(); i++) {
+                        Node node = nl.item(i).getAttributes().getNamedItem(
+                                "href");
+                        if (node != null) {
+                            record.setField("link" + i, node.getNodeValue());
+                        }
                     }
                 }
             }

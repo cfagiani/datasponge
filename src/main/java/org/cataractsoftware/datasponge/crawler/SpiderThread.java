@@ -2,6 +2,7 @@ package org.cataractsoftware.datasponge.crawler;
 
 import com.gargoylesoftware.htmlunit.BrowserVersion;
 import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
+import com.gargoylesoftware.htmlunit.Page;
 import com.gargoylesoftware.htmlunit.WebClient;
 import com.gargoylesoftware.htmlunit.html.HtmlAnchor;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
@@ -97,16 +98,18 @@ public class SpiderThread implements Runnable {
                     busy = true;
                     idleIterations = 0;
 
-                    final HtmlPage page = webClient.getPage(url);
+                    final Page page = webClient.getPage(url);
 
-                    extractLinks(page, url);
+                    if (page.isHtmlPage()) {
+                        extractLinks((HtmlPage) page, url);
+                    }
                     Collection<DataRecord> drColl = extractor.extractData(url, page);
                     if (drColl != null) {
 
                         for (DataRecord dr : drColl) {
                             if (dataEnhancers != null) {
                                 for (DataEnhancer enhancer : dataEnhancers) {
-                                    if(enhancer != null) {
+                                    if (enhancer != null) {
                                         dr = enhancer.enhanceData(dr);
                                     }
                                 }
