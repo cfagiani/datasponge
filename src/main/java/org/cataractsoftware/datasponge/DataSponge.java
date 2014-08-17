@@ -165,14 +165,13 @@ public class DataSponge {
             long iterStartTime = System.currentTimeMillis();
             DataWriter outputCollector = getNewDataAdapter(props.getProperty(DATAWRITER), props);
 
-            //TODO: handle list of enhancers
-            DataEnhancer enhancer = getNewDataAdapter(props.getProperty(DATAENHANCER), props);
+            DataEnhancer[] enhancers = getNewDataAdapterPipeline(props.getProperty(DATAENHANCER), props);
 
             seedQueue(queue, parseList(props.getProperty(STARTURLS)));
 
 
             List<SpiderThread> threadList = spawnThreads(threadCount,
-                    outputCollector, extractor, enhancer);
+                    outputCollector, extractor, enhancers);
 
             while (areStillWorking(threadList)) {
                 try {
@@ -357,5 +356,29 @@ public class DataSponge {
         } else {
             return null;
         }
+    }
+
+    /**
+     * helper to initialize an array of DataAdapter components.
+     * It is assumed that the fully-qualified class names of each component is passed in a comma-delmited string via the pipelineClasses argument.
+     *
+     * @param pipelineClasses comma delimited string containing the FQN of each dataAdapter class
+     * @param props           property object
+     * @return array of T
+     */
+    private <T extends DataAdapter> T[] getNewDataAdapterPipeline(String pipelineClasses, Properties props) {
+        T[] adapters = null;
+        if (pipelineClasses != null && pipelineClasses.trim().length() > 0) {
+            String[] classNameArray = pipelineClasses.split(",");
+            List<T> pipeline = new ArrayList<T>();
+            for (String className : classNameArray) {
+                T item = getNewDataAdapter(className, props);
+                if (item != null) {
+                    pipeline.add(item);
+                }
+            }
+            adapters = pipeline.toArray(adapters);
+        }
+        return adapters;
     }
 }

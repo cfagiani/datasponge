@@ -11,7 +11,6 @@ A simple toolkit for crawling the web and extracting information.
 
 ###TODO
 * rework programmatic config
-* support pipeline of enhancers
 
 ###Sample Property File
 
