@@ -40,9 +40,11 @@ For all modes except FULLTEXT,  the DataRecord will contain fields that include 
 ####Included Enhancers
 * GroovyEnhancer - a shim that allows for the dynamic loading of a Groovy script
 
-###TODO
+###Potential Enhancements
 * rework programmatic config
-* introduce messaging to allow ability to run distributed?
+* introduce messaging to allow ability to run distributed
+* base RSS/Atom extractor
+* filesystem 'crawler'
 
 
 ###Sample Property File
@@ -51,7 +53,7 @@ For all modes except FULLTEXT,  the DataRecord will contain fields that include 
     proxyhost=someproxyserver.yourdomain.com
     proxyport=80
 
-    #comma-delimited list of urls from which to
+    #comma-delimited list of urls from which to begin the crawl
     starturls=http://www.buffalonews.com
 
     #regex that urls MUST match to be included in crawl
@@ -66,7 +68,7 @@ For all modes except FULLTEXT,  the DataRecord will contain fields that include 
     #how often the driver checks for completion and flushes output
     sleepinterval=20000
 
-
+    #fully qualified classnames of components to use
     dataextractor=org.cataractsoftware.datasponge.extractor.HyperlinkExtractor
     datawriter=org.cataractsoftware.datasponge.writer.PrintWriter
 
