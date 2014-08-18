@@ -19,14 +19,16 @@ import static org.junit.Assert.assertTrue;
 public class TextSearchExtractorTest {
 
     private static final String URL = "https://code.jquery.com/jquery-2.1.1.js";
+    private static final String FOUND_WORD = "window";
+    private static final String NOT_FOUND_WORD = "Abandon all hope, ye who enter here";
 
 
-    private TextSearchExtractor buildExtractor(String mode) {
+    private TextSearchExtractor buildExtractor(String mode, String searchString) {
         TextSearchExtractor extractor = new TextSearchExtractor();
         Properties props = new Properties();
         props.setProperty("textsearchextractor.mode", mode);
         props.setProperty("textsearchextractor.ignorecase", "true");
-        props.setProperty("textsearchextractor.searchstring", "window");
+        props.setProperty("textsearchextractor.searchstring", searchString);
         extractor.init(props);
         return extractor;
     }
@@ -36,10 +38,21 @@ public class TextSearchExtractorTest {
 
         WebClient client = new WebClient();
 
-        DataExtractor extractor = buildExtractor("ALL");
+        DataExtractor extractor = buildExtractor("ALL", FOUND_WORD);
         Collection<DataRecord> records = extractor.extractData(URL, client.getPage(URL));
-        assertNotNull(records);
-        assertTrue(records.size() > 1);
+        assertNotNull("extractor should never return null", records);
+        assertTrue("should have found multiple results", records.size() > 1);
+    }
+
+    @Test
+    public void testNotFound() throws Exception {
+
+        WebClient client = new WebClient();
+
+        DataExtractor extractor = buildExtractor("ALL", NOT_FOUND_WORD);
+        Collection<DataRecord> records = extractor.extractData(URL, client.getPage(URL));
+        assertNotNull("extractor should never return null", records);
+        assertTrue("string should not have been found", records.size() == 0);
     }
 
     @Test
@@ -47,10 +60,10 @@ public class TextSearchExtractorTest {
         String url = "https://code.jquery.com/jquery-2.1.1.js";
         WebClient client = new WebClient();
 
-        DataExtractor extractor = buildExtractor("FIRST");
+        DataExtractor extractor = buildExtractor("FIRST", FOUND_WORD);
         Collection<DataRecord> records = extractor.extractData(url, client.getPage(url));
-        assertNotNull(records);
-        assertTrue(records.size() == 1);
+        assertNotNull("extractor should never return null", records);
+        assertTrue("only one result should be returned", records.size() == 1);
     }
 
 

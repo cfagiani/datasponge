@@ -48,7 +48,7 @@ public class HyperlinkExtractorTest {
         DataExtractor extractor = buildExtractor();
         Collection<DataRecord> records = extractor.extractData(URL, client.getPage(NO_LINKURL));
         assertNotNull("link extractor should return one result", records);
-        assertTrue("link extractor shoudl return one result", records.size() == 1);
+        assertTrue("link extractor should return one result", records.size() == 1);
         for (DataRecord r : records) {
             assertTrue("Page should have not contained links", r.getFieldCount() == 0);
         }
