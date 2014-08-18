@@ -66,16 +66,14 @@ public class CrawlerWorkqueue {
 
     /**
      * returns a singleton instance. Should only be used after createInstance is
-     * called BUT if you call this before calling createInstance, it will return
-     * a newly created singleton instance that uses null for both includeList
-     * and excludeList (basically worthless.)
+     * called.
      *
      * @return singleton instance of this class, initializing if needed
+     * @throws java.lang.IllegalStateException if this is called prior to createInstance
      */
     public static CrawlerWorkqueue getInstance() {
         if (workqueue == null) {
-            workqueue = new CrawlerWorkqueue(new HashSet<String>(),
-                    new HashSet<String>());
+            throw new IllegalStateException("You must call createInstance prior to calling this method");
         }
         return workqueue;
     }
