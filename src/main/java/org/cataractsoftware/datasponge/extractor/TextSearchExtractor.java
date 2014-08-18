@@ -1,5 +1,6 @@
 package org.cataractsoftware.datasponge.extractor;
 
+import com.gargoylesoftware.htmlunit.JavaScriptPage;
 import com.gargoylesoftware.htmlunit.Page;
 import com.gargoylesoftware.htmlunit.SgmlPage;
 import com.gargoylesoftware.htmlunit.TextPage;
@@ -27,6 +28,7 @@ public class TextSearchExtractor implements DataExtractor {
 
     public static final String RECORD_TYPE = "TextMatch";
     public static final String MATCH_TEXT_FIELD = "matchText";
+    public static final String IDX_FIELD = "matchStartIdx";
 
     private int prefixLength;
     private int suffixLength;
@@ -44,6 +46,8 @@ public class TextSearchExtractor implements DataExtractor {
             body = ((SgmlPage) page).asText();
         } else if (page instanceof TextPage) {
             body = ((TextPage) page).getContent();
+        } else if (page instanceof JavaScriptPage) {
+            body = ((JavaScriptPage) page).getContent();
         }
 
         return performSearch(url, body);
@@ -60,6 +64,7 @@ public class TextSearchExtractor implements DataExtractor {
                 if (searchableText.contains(searchString)) {
                     DataRecord record = new DataRecord(url, RECORD_TYPE);
                     record.setField(MATCH_TEXT_FIELD, body);
+                    record.setField(IDX_FIELD, searchableText.indexOf(searchString));
                     records.add(record);
                 }
                 break;
@@ -95,6 +100,7 @@ public class TextSearchExtractor implements DataExtractor {
             String contextText = text.substring(matchIdx - prefixLength >= 0 ? matchIdx - prefixLength : 0, matchIdx + suffixLength < text.length() - 1 ? matchIdx + suffixLength : text.length() - 1);
             DataRecord record = new DataRecord(url, RECORD_TYPE);
             record.setField(MATCH_TEXT_FIELD, contextText);
+            record.setField(IDX_FIELD, matchIdx);
             return record;
         } else {
             return null;

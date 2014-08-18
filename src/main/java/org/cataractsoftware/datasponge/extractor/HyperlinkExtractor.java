@@ -20,9 +20,11 @@ import java.util.Properties;
 public class HyperlinkExtractor implements DataExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(HyperlinkExtractor.class);
+    public static final String RECORD_TYPE = "linklist";
+    public static final String FIELD_PREFIX = "link";
 
     public Collection<DataRecord> extractData(String url, Page page) {
-        DataRecord record = new DataRecord(url, "linklist");
+        DataRecord record = new DataRecord(url, RECORD_TYPE);
         try {
             if (page.isHtmlPage()) {
                 NodeList nl = ((HtmlPage) page).getElementsByTagName("a");
@@ -31,7 +33,7 @@ public class HyperlinkExtractor implements DataExtractor {
                         Node node = nl.item(i).getAttributes().getNamedItem(
                                 "href");
                         if (node != null) {
-                            record.setField("link" + i, node.getNodeValue());
+                            record.setField(FIELD_PREFIX + i, node.getNodeValue());
                         }
                     }
                 }
