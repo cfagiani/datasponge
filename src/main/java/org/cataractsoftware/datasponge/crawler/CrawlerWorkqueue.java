@@ -95,7 +95,9 @@ public class CrawlerWorkqueue {
                 url = url.substring(0, url.indexOf("#"));
             }
             // if it's a relative url, make it absolute
-            url = makeAbsolute(url, pageUrl);
+            if (pageUrl != null) {
+                url = makeAbsolute(url, pageUrl);
+            }
 
             if (!processedUrls.contains(url) && isInList(url, includeList)
                     && !isInList(url, ignoreList)) {
@@ -115,30 +117,38 @@ public class CrawlerWorkqueue {
     private String makeAbsolute(String linkUrl, String pageUrl) {
         String url = linkUrl.trim();
         if (!url.startsWith("http")) {
-            // find the index of the first "/" that isn't in the protocol
-            // section
-            int idxOfEndOfProtocol = pageUrl.indexOf("//") + 2;
-            int idxOfFirstSlash = pageUrl.indexOf("/",
-                    idxOfEndOfProtocol);
-            if (url.startsWith("/")) {
-                // if it starts with "/" then we need the root
-                if (idxOfFirstSlash > 0) {
-                    // if the pageURL contains a / then we need to get just up
-                    // to that
-                    url = pageUrl.substring(0, idxOfFirstSlash) + linkUrl;
+            if (pageUrl.startsWith("file:")) {
+                if (pageUrl.endsWith("/")) {
+                    url = pageUrl + url;
                 } else {
-                    // if the pageURL doesn't have a trailing slash, just
-                    // concatenate
-                    url = pageUrl + linkUrl;
+                    url = pageUrl + "/" + url;
                 }
             } else {
-                // if the linkUrl doesn't start with "/" then it's relative to
-                // the directory of the pageUrl
-                int idxOfLastSlash = pageUrl.lastIndexOf("/");
-                if (idxOfLastSlash > 0 && idxOfLastSlash > idxOfEndOfProtocol) {
-                    url = pageUrl.substring(0, idxOfLastSlash) + "/" + linkUrl;
+                // find the index of the first "/" that isn't in the protocol
+                // section
+                int idxOfEndOfProtocol = pageUrl.indexOf("//") + 2;
+                int idxOfFirstSlash = pageUrl.indexOf("/",
+                        idxOfEndOfProtocol);
+                if (url.startsWith("/")) {
+                    // if it starts with "/" then we need the root
+                    if (idxOfFirstSlash > 0) {
+                        // if the pageURL contains a / then we need to get just up
+                        // to that
+                        url = pageUrl.substring(0, idxOfFirstSlash) + linkUrl;
+                    } else {
+                        // if the pageURL doesn't have a trailing slash, just
+                        // concatenate
+                        url = pageUrl + linkUrl;
+                    }
                 } else {
-                    url = pageUrl + "/" + linkUrl;
+                    // if the linkUrl doesn't start with "/" then it's relative to
+                    // the directory of the pageUrl
+                    int idxOfLastSlash = pageUrl.lastIndexOf("/");
+                    if (idxOfLastSlash > 0 && idxOfLastSlash > idxOfEndOfProtocol) {
+                        url = pageUrl.substring(0, idxOfLastSlash) + "/" + linkUrl;
+                    } else {
+                        url = pageUrl + "/" + linkUrl;
+                    }
                 }
             }
         }

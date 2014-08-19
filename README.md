@@ -44,8 +44,7 @@ For all modes except FULLTEXT,  the DataRecord will contain fields that include 
 * rework programmatic config
 * introduce messaging to allow ability to run distributed
 * base RSS/Atom extractor
-* filesystem 'crawler'
-
+* handle different types of binary content (xlsx, pdf, etc) for text search
 
 ###Sample Property File
 

@@ -4,19 +4,20 @@ import com.gargoylesoftware.htmlunit.BrowserVersion;
 import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
 import com.gargoylesoftware.htmlunit.Page;
 import com.gargoylesoftware.htmlunit.WebClient;
-import com.gargoylesoftware.htmlunit.html.HtmlAnchor;
-import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.enhancer.DataEnhancer;
 import org.cataractsoftware.datasponge.extractor.DataExtractor;
+import org.cataractsoftware.datasponge.extractor.DirectoryExtractor;
+import org.cataractsoftware.datasponge.extractor.HyperlinkExtractor;
 import org.cataractsoftware.datasponge.writer.DataWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.Collection;
-import java.util.List;
+import java.util.Map;
 
 /**
  * This class is meant to be run in its own thread. It will pop an url off the
@@ -41,7 +42,10 @@ public class SpiderThread implements Runnable {
     public static final int MAX_IDLE_ITERATIONS = 2;
     public static final int BACKOFF_INTERVAL = 10000;
     private DataExtractor extractor;
+    private DataExtractor dirExtractor;
+    private DataExtractor linkExtractor;
     private DataEnhancer[] dataEnhancers;
+    private WebClient webClient;
 
     public boolean isBusy() {
         return busy;
@@ -64,10 +68,12 @@ public class SpiderThread implements Runnable {
 
         queue = CrawlerWorkqueue.getInstance();
         this.extractor = extractor;
+        this.dirExtractor = new DirectoryExtractor();
+        this.linkExtractor = new HyperlinkExtractor();
         busy = true;
         outputCollector = collector;
         dataEnhancers = enhancers;
-
+        webClient = initializeWebClient();
     }
 
     /**
@@ -88,36 +94,30 @@ public class SpiderThread implements Runnable {
      */
     @Override
     public void run() {
-        final WebClient webClient = initializeWebClient();
         int idleIterations = 0;
-
         while (busy) {
             try {
                 String url = queue.dequeue();
                 if (url != null) {
                     busy = true;
                     idleIterations = 0;
+                    Page page = processItem(url);
+                    if (page != null) {
+                        Collection<DataRecord> drColl = extractor.extractData(url, page);
+                        if (drColl != null) {
 
-                    final Page page = webClient.getPage(url);
-
-                    if (page.isHtmlPage()) {
-                        extractLinks((HtmlPage) page, url);
-                    }
-                    Collection<DataRecord> drColl = extractor.extractData(url, page);
-                    if (drColl != null) {
-
-                        for (DataRecord dr : drColl) {
-                            if (dataEnhancers != null) {
-                                for (DataEnhancer enhancer : dataEnhancers) {
-                                    if (enhancer != null) {
-                                        dr = enhancer.enhanceData(dr);
+                            for (DataRecord dr : drColl) {
+                                if (dataEnhancers != null) {
+                                    for (DataEnhancer enhancer : dataEnhancers) {
+                                        if (enhancer != null) {
+                                            dr = enhancer.enhanceData(dr);
+                                        }
                                     }
                                 }
+                                outputCollector.addItem(dr);
                             }
-                            outputCollector.addItem(dr);
                         }
                     }
-
                 } else {
                     if (idleIterations > MAX_IDLE_ITERATIONS) {
                         busy = false;
@@ -126,12 +126,6 @@ public class SpiderThread implements Runnable {
                         idleIterations++;
                     }
                 }
-            } catch (FailingHttpStatusCodeException e) {
-                logger.error("HTTP Failure", e);
-            } catch (MalformedURLException e) {
-                logger.error("Bad URL", e);
-            } catch (IOException e) {
-                logger.error("IO Error", e);
             } catch (InterruptedException e) {
                 logger.error("Thread interrupt", e);
             }
@@ -139,19 +133,74 @@ public class SpiderThread implements Runnable {
     }
 
     /**
-     * extracts all hyperlinks from a page
+     * attempts to process the item identified by thisPage in order to find additional items to process. If thisPage refers to a local directory,
+     * the DirectoryExtractor will be used to obtain a list of contents which will be added to the workqueue.. If thisPage refers to a file (either local or remote), a Page will be returned containing the content.
+     * If the page is an HtmlPage, it will be searched for additional links and, if found, they will be added to the workqueue.
      *
-     * @param page     page to process
-     * @param thisPage url of current page
+     * @param thisPage
+     * @return
      */
-    private void extractLinks(HtmlPage page, String thisPage) {
-        List<HtmlAnchor> anchors = page.getAnchors();
-        for (HtmlAnchor anchor : anchors) {
-            String link = anchor.getHrefAttribute();
-            if (link != null && !link.toLowerCase().startsWith("mailto:")) {
-                queue.enqueue(link, thisPage);
+    private Page processItem(String thisPage) {
+        if (thisPage != null) {
+            Collection<DataRecord> records = null;
+            if (thisPage.startsWith(DirectoryExtractor.PROTOCOL)) {
+                records = dirExtractor.extractData(thisPage, null);
+                if (records != null) {
+                    for (DataRecord r : records) {
+                        if (DirectoryExtractor.DIR_RECORD_TYPE.equals(r.getType())) {
+                            for (Map.Entry<String, Object> field : r.getFields()) {
+                                String link = (String) field.getValue();
+                                if (link != null && !link.trim().equals(".") && !link.trim().equals("..")) {
+                                    queue.enqueue(link, thisPage);
+                                }
+                            }
+                        } else if (DirectoryExtractor.FILE_RECORD_TYPE.equals(r.getType())) {
+                            return processFile(thisPage,false);
+                        }
+                    }
+                }
+            } else {
+                return processFile(thisPage,true);
             }
         }
+        return null;
+    }
+
+    /**
+     * processes a page by first attempting to read it with the webClient. If the page returned is a HtmlPage, the links will be extracted and added to the workqueue prior to returning the page data.
+     *
+     * @param thisPage
+     * @param extractLinks - indicates whether links should be parsed from the page
+     * @return
+     */
+    private Page processFile(String thisPage, boolean extractLinks) {
+        try {
+            //TODO: this can fail if running offline and the page attempts to load remote JS
+            Page page = webClient.getPage(thisPage);
+            if (extractLinks) {
+                Collection<DataRecord> records = linkExtractor.extractData(thisPage, page);
+                if (records != null) {
+                    for (DataRecord r : records) {
+                        for (Map.Entry<String, Object> field : r.getFields()) {
+                            String link = (String) field.getValue();
+                            if (link != null && !link.toLowerCase().startsWith("mailto:")) {
+                                queue.enqueue(link, thisPage);
+                            }
+                        }
+                    }
+                }
+            }
+            return page;
+        } catch (FileNotFoundException e) {
+            logger.info("File not found: " + thisPage);
+        } catch (FailingHttpStatusCodeException e) {
+            logger.error("HTTP Failure", e);
+        } catch (MalformedURLException e) {
+            logger.error("Bad URL", e);
+        } catch (IOException e) {
+            logger.error("IO Error", e);
+        }
+        return null;
     }
 
 
