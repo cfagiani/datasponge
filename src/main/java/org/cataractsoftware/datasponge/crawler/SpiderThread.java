@@ -4,6 +4,8 @@ import com.gargoylesoftware.htmlunit.BrowserVersion;
 import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
 import com.gargoylesoftware.htmlunit.Page;
 import com.gargoylesoftware.htmlunit.WebClient;
+import net.sourceforge.htmlunit.corejs.javascript.EcmaError;
+import net.sourceforge.htmlunit.corejs.javascript.RhinoException;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.enhancer.DataEnhancer;
 import org.cataractsoftware.datasponge.extractor.DataExtractor;
@@ -46,6 +48,7 @@ public class SpiderThread implements Runnable {
     private DataExtractor linkExtractor;
     private DataEnhancer[] dataEnhancers;
     private WebClient webClient;
+    private WebClient backupWebClient;
 
     public boolean isBusy() {
         return busy;
@@ -73,7 +76,8 @@ public class SpiderThread implements Runnable {
         busy = true;
         outputCollector = collector;
         dataEnhancers = enhancers;
-        webClient = initializeWebClient();
+        webClient = initializeWebClient(false);
+        backupWebClient = initializeWebClient(true);
     }
 
     /**
@@ -176,7 +180,7 @@ public class SpiderThread implements Runnable {
     private Page processFile(String thisPage, boolean extractLinks) {
         try {
             //TODO: this can fail if running offline and the page attempts to load remote JS
-            Page page = webClient.getPage(thisPage);
+            Page page = fetchPage(thisPage);
             if (extractLinks) {
                 Collection<DataRecord> records = linkExtractor.extractData(thisPage, page);
                 if (records != null) {
@@ -203,6 +207,17 @@ public class SpiderThread implements Runnable {
         return null;
     }
 
+    private Page fetchPage(String url) throws IOException, MalformedURLException{
+        Page p = null;
+        try{
+            p = webClient.getPage(url);
+        }catch(RuntimeException rEx){
+            logger.warn("Could not load page with normal client. Trying backup",rEx);
+            p = backupWebClient.getPage(url);
+        }
+        return p;
+    }
+
 
     /**
      * initializes the WebClient object that will be used to fetch and parse web
@@ -210,13 +225,20 @@ public class SpiderThread implements Runnable {
      *
      * @return new instance of WebClient that can be used to load and parse pages
      */
-    private WebClient initializeWebClient() {
+    private WebClient initializeWebClient(boolean minimal) {
 
+        WebClient client = null;
         if (proxy != null) {
-            return new WebClient(BrowserVersion.CHROME,
+            client = new WebClient(BrowserVersion.CHROME,
                     proxy, port);
         } else {
-            return new WebClient(BrowserVersion.CHROME);
+            client= new WebClient(BrowserVersion.CHROME);
         }
+        if(minimal){
+            client.getOptions().setAppletEnabled(false);
+            client.getOptions().setJavaScriptEnabled(false);
+            client.getOptions().setCssEnabled(false);
+        }
+        return client;
     }
 }

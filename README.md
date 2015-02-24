@@ -30,6 +30,7 @@ The system has a pluggable architecture that allows users to easily specify thei
     * FIRST - finds the first occurrence of the string
     * LAST - finds the last occurrence of the string
     * FULLTEXT - determines if the page contains the string
+* PdfTextExtractor - this extractor will output a single DataRecord per PDF document (the text will be in a field called "text" within the data record)
 
 For all modes except FULLTEXT,  the DataRecord will contain fields that include the index of the match within the body and the context (the match plus a configurable number of characters before/after). For FULLTEXT, the record will contain the entire body of the page.
 
@@ -44,7 +45,10 @@ For all modes except FULLTEXT,  the DataRecord will contain fields that include 
 * rework programmatic config
 * introduce messaging to allow ability to run distributed
 * base RSS/Atom extractor
-* handle different types of binary content (xlsx, pdf, etc) for text search
+* handle different types of binary content (xlsx, etc) for text search
+* use a messaging system to allow for mutli-machine scale-out (use "ring" semantics for partitioning the space for tracking seen pages)
+* make into a platform that can handle job submissions - this would include a simple UI for submitting new crawl jobs
+
 
 ###Sample Property File
 

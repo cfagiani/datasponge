@@ -1,17 +1,12 @@
 package org.cataractsoftware.datasponge.extractor;
 
-import com.gargoylesoftware.htmlunit.JavaScriptPage;
-import com.gargoylesoftware.htmlunit.Page;
-import com.gargoylesoftware.htmlunit.SgmlPage;
-import com.gargoylesoftware.htmlunit.TextPage;
+import com.gargoylesoftware.htmlunit.*;
 import org.cataractsoftware.datasponge.DataRecord;
+import org.cataractsoftware.datasponge.util.PdfUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.StringWriter;
+import java.io.*;
 import java.util.*;
 
 /**
@@ -59,13 +54,21 @@ public class TextSearchExtractor implements DataExtractor {
             body = ((TextPage) page).getContent();
         } else if (page instanceof JavaScriptPage) {
             body = ((JavaScriptPage) page).getContent();
+        }else if (page instanceof UnexpectedPage || page instanceof BinaryPage){
+            if(url.toLowerCase().trim().endsWith(".pdf")){
+                try {
+                    body = PdfUtil.extractTextFromPdf(url);
+                }catch(IOException e){
+                    logger.error("Could not extract PDF",e);
+                }
+            }
         }
         return performSearch(url, body);
     }
 
     /**
      * reads a file's content into a string
-     * TODO: handle non-text content (PDF, XLS(X), PPT(X), etc)
+     * TODO: handle non-text content (XLS(X), PPT(X), etc)
      *
      * @param fileUrl
      * @return
@@ -73,25 +76,33 @@ public class TextSearchExtractor implements DataExtractor {
     private String getBodyFromFile(String fileUrl) {
         File file = new File(fileUrl.replace("file://", "").replace("/", File.separator));
         if ( file.exists() && file.isFile() && shouldSearch(file.getName())){
-            BufferedReader reader = null;
-            try {
-                StringBuilder builder = new StringBuilder();
-                reader = new BufferedReader(new FileReader(file));
-                String line = reader.readLine();
-                while (line != null) {
-                    builder.append(line).append("\n");
-                    line = reader.readLine();
+            if(fileUrl.toLowerCase().endsWith(".pdf")){
+                try {
+                    return PdfUtil.extractTextFromPdf(file);
+                }catch(IOException e){
+                    logger.error("Could not read body from pdf",e);
                 }
-                return builder.toString();
+            }else {
+                BufferedReader reader = null;
+                try {
+                    StringBuilder builder = new StringBuilder();
+                    reader = new BufferedReader(new FileReader(file));
+                    String line = reader.readLine();
+                    while (line != null) {
+                        builder.append(line).append("\n");
+                        line = reader.readLine();
+                    }
+                    return builder.toString();
 
-            } catch (Exception e) {
-                logger.error("Could not read file", e);
-            } finally {
-                if (reader != null) {
-                    try {
-                        reader.close();
-                    } catch (Exception e) {
-                        logger.error("Could not close reader", e);
+                } catch (Exception e) {
+                    logger.error("Could not read file", e);
+                } finally {
+                    if (reader != null) {
+                        try {
+                            reader.close();
+                        } catch (Exception e) {
+                            logger.error("Could not close reader", e);
+                        }
                     }
                 }
             }
