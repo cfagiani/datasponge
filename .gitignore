@@ -4,6 +4,18 @@
 *.iml
 *.idea
 
+#eclipse files #
+*.project
+*.classpath
+*.settings
+
+*.gradle
+
+
+#output dirs #
+/bin
+/build
+
 # Package Files #
 *.jar
 *.war
