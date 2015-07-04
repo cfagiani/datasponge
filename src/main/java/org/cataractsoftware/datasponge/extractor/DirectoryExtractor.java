@@ -1,6 +1,7 @@
 package org.cataractsoftware.datasponge.extractor;
 
 import com.gargoylesoftware.htmlunit.Page;
+import org.cataractsoftware.datasponge.AbstractDataAdapter;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,17 +12,17 @@ import java.util.Collection;
 import java.util.Properties;
 
 /**
+ * DataExtractor for processing a filesystem directory on the same host (or mounted on the same host) as the application is running.
+ *
  * @author Christopher Fagiani
  */
-public class DirectoryExtractor implements DataExtractor {
-    private Logger logger = LoggerFactory.getLogger(DirectoryExtractor.class);
-    public static String PROTOCOL = "file://";
-
+public class DirectoryExtractor extends AbstractDataAdapter implements DataExtractor {
     public static final String DIR_RECORD_TYPE = "directoryListing";
     public static final String FILE_RECORD_TYPE = "file";
     public static final String FIELD_PREFIX = "dirEntry";
     public static final String SPECIAL_FILE_TYPE = "specialFile";
-
+    public static String PROTOCOL = "file://";
+    private Logger logger = LoggerFactory.getLogger(DirectoryExtractor.class);
 
     @Override
     public Collection<DataRecord> extractData(String url, Page page) {
@@ -36,7 +37,7 @@ public class DirectoryExtractor implements DataExtractor {
                         record.setField(FIELD_PREFIX + i, contents[i]);
                     }
                 }
-            } else if(file.isFile()){
+            } else if (file.isFile()) {
                 record = new DataRecord(url, FILE_RECORD_TYPE);
             } else {
                 record = new DataRecord(url, SPECIAL_FILE_TYPE);

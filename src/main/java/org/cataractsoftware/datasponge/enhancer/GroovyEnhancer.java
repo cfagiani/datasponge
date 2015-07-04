@@ -7,6 +7,7 @@ import org.cataractsoftware.datasponge.util.GroovyDataAdapter;
 /**
  * data enhancer that relies on a groovy script to perform the enhancement. The location of the script file
  * must be specified in the properties file under the key "groovyenhancerclass"
+ *
  * @author Christopher Fagiani
  */
 public class GroovyEnhancer extends GroovyDataAdapter implements DataEnhancer {

@@ -2,10 +2,23 @@ package org.cataractsoftware.datasponge.crawler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
+import org.springframework.jms.annotation.JmsListener;
+import org.springframework.jms.core.JmsTemplate;
+import org.springframework.jms.core.MessageCreator;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.Session;
 import java.util.HashSet;
 import java.util.NoSuchElementException;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -19,63 +32,63 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * store. it will only be added if it matches a regex in the includeList AND it
  * does NOT match a regex in the ignoreList (configured via the constructor).
  * <p/>
- * The internal data store behaves like a FIFO queue.
+ * If the url passes the regex checks, it will be submitted to a JMS topic. This class also serves as a message listener for that topic BUT
+ * it will only process the messages that have URLs that have this host's nodeId as the 'target' JMS property.
+ * <p/>
+ * When receiving messages that correspond to this host, the url is placed in an internal datastore that behaves like a FIFO queue.
  *
  * @author Christopher Fagiani
  */
-public class CrawlerWorkqueue {
+@Component
+@Scope(value = ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+public class
+        CrawlerWorkqueue {
+    private static final String SELECTOR_PROP = "target";
 
-    private static final Logger logger = LoggerFactory.getLogger(CrawlerWorkqueue.class);
-    private HashSet<String> processedUrls;
-    private HashSet<String> ignoreList;
-    private HashSet<String> includeList;
-    private static CrawlerWorkqueue workqueue;
+    private static final Logger logger = LoggerFactory
+            .getLogger(CrawlerWorkqueue.class);
+    private Set<String> processedUrls;
+    private Set<String> ignoreList;
+    private Set<String> includeList;
     private Queue<String> queue;
+    @Resource(name = "workQueueTemplate")
+    private JmsTemplate workQueueTemplate;
+    private String jobId;
+    private String selectorVal;
+    private int modSize;
+    private int nodeId;
 
-    /**
-     * creates a new instance
-     *
-     * @param excludeList -
-     *                    list of regular expressions that should be used to EXCLUDE
-     *                    urls from the work queue
-     * @param includes    -
-     *                    list of regular expressions that are used to include urls
-     */
-    private CrawlerWorkqueue(HashSet<String> excludeList,
-                             HashSet<String> includes) {
+
+    private CrawlerWorkqueue() {
         processedUrls = new HashSet<String>();
-        ignoreList = excludeList;
         queue = new ConcurrentLinkedQueue<String>();
-        includeList = includes;
 
     }
 
     /**
-     * creates a singleton instance
-     *
-     * @param excludeList list of regular expressions that should be used to EXCLUDE
-     *                    urls from the work queue
-     * @param includes    list of regular expressions that are used to include urls
-     * @return new instance of this class
+     * set up all the member variables used for admitting/rejecting urls.
+     * @param jobId
+     * @param excludeList
+     * @param includes
+     * @param nodeId
+     * @param modSize
      */
-    public static CrawlerWorkqueue createInstance(HashSet<String> excludeList,
-                                                  HashSet<String> includes) {
-        workqueue = new CrawlerWorkqueue(excludeList, includes);
-        return workqueue;
-    }
-
-    /**
-     * returns a singleton instance. Should only be used after createInstance is
-     * called.
-     *
-     * @return singleton instance of this class, initializing if needed
-     * @throws java.lang.IllegalStateException if this is called prior to createInstance
-     */
-    public static CrawlerWorkqueue getInstance() {
-        if (workqueue == null) {
-            throw new IllegalStateException("You must call createInstance prior to calling this method");
+    public void initialize(String jobId, Set<String> excludeList,
+                           Set<String> includes, int nodeId, int modSize) {
+        this.jobId = jobId;
+        if (excludeList != null) {
+            ignoreList = excludeList;
+        } else {
+            ignoreList = new HashSet<String>();
         }
-        return workqueue;
+        if (includes != null) {
+            includeList = includes;
+        } else {
+            includeList = new HashSet<String>();
+        }
+        this.nodeId = nodeId;
+        this.modSize = modSize;
+        this.selectorVal = jobId + "-" + nodeId;
     }
 
     /**
@@ -101,7 +114,29 @@ public class CrawlerWorkqueue {
 
             if (!processedUrls.contains(url) && isInList(url, includeList)
                     && !isInList(url, ignoreList)) {
-                queue.add(url);
+                final String targetUrl = url;
+                MessageCreator messageCreator = new MessageCreator() {
+                    @Override
+                    public Message createMessage(Session session)
+                            throws JMSException {
+                        try {
+
+                            Message m = session.createTextMessage(targetUrl);
+
+                            m.setStringProperty(SELECTOR_PROP, jobId + "-"
+                                    + (targetUrl.hashCode() % modSize));
+                            return m;
+                        } catch (Exception e) {
+                            logger.error(
+                                    "Could not publish work item as json to jms",
+                                    e);
+                            throw new JMSException(
+                                    "Could not publish work item: "
+                                            + e.getMessage());
+                        }
+                    }
+                };
+                workQueueTemplate.send(messageCreator);
                 processedUrls.add(url);
             }
         }
@@ -127,12 +162,12 @@ public class CrawlerWorkqueue {
                 // find the index of the first "/" that isn't in the protocol
                 // section
                 int idxOfEndOfProtocol = pageUrl.indexOf("//") + 2;
-                int idxOfFirstSlash = pageUrl.indexOf("/",
-                        idxOfEndOfProtocol);
+                int idxOfFirstSlash = pageUrl.indexOf("/", idxOfEndOfProtocol);
                 if (url.startsWith("/")) {
                     // if it starts with "/" then we need the root
                     if (idxOfFirstSlash > 0) {
-                        // if the pageURL contains a / then we need to get just up
+                        // if the pageURL contains a / then we need to get just
+                        // up
                         // to that
                         url = pageUrl.substring(0, idxOfFirstSlash) + linkUrl;
                     } else {
@@ -141,11 +176,14 @@ public class CrawlerWorkqueue {
                         url = pageUrl + linkUrl;
                     }
                 } else {
-                    // if the linkUrl doesn't start with "/" then it's relative to
+                    // if the linkUrl doesn't start with "/" then it's relative
+                    // to
                     // the directory of the pageUrl
                     int idxOfLastSlash = pageUrl.lastIndexOf("/");
-                    if (idxOfLastSlash > 0 && idxOfLastSlash > idxOfEndOfProtocol) {
-                        url = pageUrl.substring(0, idxOfLastSlash) + "/" + linkUrl;
+                    if (idxOfLastSlash > 0
+                            && idxOfLastSlash > idxOfEndOfProtocol) {
+                        url = pageUrl.substring(0, idxOfLastSlash) + "/"
+                                + linkUrl;
                     } else {
                         url = pageUrl + "/" + linkUrl;
                     }
@@ -160,10 +198,11 @@ public class CrawlerWorkqueue {
      * least 1 regex matches the url
      *
      * @param url  url to check
-     * @param list set of regular expressions against which the url will be checked
+     * @param list set of regular expressions against which the url will be
+     *             checked
      * @return true if url matches at least 1 expression
      */
-    private boolean isInList(String url, HashSet<String> list) {
+    private boolean isInList(String url, Set<String> list) {
         boolean matches = false;
         for (String s : list) {
             matches = url.matches(s);
@@ -174,6 +213,9 @@ public class CrawlerWorkqueue {
         return matches;
     }
 
+    /**
+     * clears internal datastructures
+     */
     public void reset() {
         if (processedUrls != null) {
             processedUrls.clear();
@@ -203,18 +245,20 @@ public class CrawlerWorkqueue {
         return item;
     }
 
+
     /**
-     * returns the size of the work queue
-     *
-     * @return size of queue
+     * called by the message listener container in response to receipt of a JMS message. This method will compare the value of the
+     * target property to this node's hostId and, if it matches, will add it to the internal queue if the url hasn't already been processed.
+     * @param msg
+     * @param selector
      */
-    public int getSize() {
-        if (queue != null) {
-            return queue.size();
-        } else {
-            return 0;
+    @JmsListener(id = "dataspongeworkqueue", destination = "datasponge.workqueue.topic", containerFactory = "topicContainerFactory")
+    public void handleWorkMessage(@Payload String msg, @Header(SELECTOR_PROP) String selector) {
+        if (this.selectorVal.equals(selector)) {
+            if (!processedUrls.contains(msg)){
+                queue.add(msg);
+            }
         }
     }
 
 }
-

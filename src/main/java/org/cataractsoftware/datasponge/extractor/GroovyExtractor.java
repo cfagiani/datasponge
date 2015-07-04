@@ -1,7 +1,6 @@
 package org.cataractsoftware.datasponge.extractor;
 
 import com.gargoylesoftware.htmlunit.Page;
-import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.util.GroovyDataAdapter;
 

@@ -16,5 +16,5 @@ public interface DataEnhancer extends DataAdapter {
      * @param record - record to enhance
      * @return - enhanced record
      */
-    public DataRecord enhanceData(DataRecord record);
+    DataRecord enhanceData(DataRecord record);
 }

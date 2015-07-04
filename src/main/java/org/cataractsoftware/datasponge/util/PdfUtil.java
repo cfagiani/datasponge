@@ -9,12 +9,14 @@ import java.net.URL;
 
 /**
  * Wrapper over pdf manipulation libraries
- *  @author Christopher Fagiani
+ *
+ * @author Christopher Fagiani
  */
 public class PdfUtil {
 
     /**
      * extracts the textual content of a pdf loaded from the URL passed in as a single string
+     *
      * @param url
      * @return
      * @throws IOException
@@ -25,6 +27,7 @@ public class PdfUtil {
 
     /**
      * extracts the textual content of a pdf loaded from the URL passed in as a single string
+     *
      * @param file
      * @return
      * @throws IOException
@@ -33,7 +36,7 @@ public class PdfUtil {
         return extractText(PDDocument.load(file));
     }
 
-    private static String extractText(PDDocument pdfDoc) throws IOException{
+    private static String extractText(PDDocument pdfDoc) throws IOException {
         PDFTextStripper textStripper = new PDFTextStripper();
         return textStripper.getText(pdfDoc);
     }

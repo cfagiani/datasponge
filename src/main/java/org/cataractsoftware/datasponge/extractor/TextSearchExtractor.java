@@ -1,12 +1,16 @@
 package org.cataractsoftware.datasponge.extractor;
 
 import com.gargoylesoftware.htmlunit.*;
+import org.cataractsoftware.datasponge.AbstractDataAdapter;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.util.PdfUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -14,24 +18,20 @@ import java.util.*;
  *
  * @author Christopher Fagiani
  */
-public class TextSearchExtractor implements DataExtractor {
+public class TextSearchExtractor extends AbstractDataAdapter implements DataExtractor {
 
+    public static final String RECORD_TYPE = "TextMatch";
+    public static final String MATCH_TEXT_FIELD = "matchText";
+    public static final String IDX_FIELD = "matchStartIdx";
     private static final Logger logger = LoggerFactory.getLogger(TextSearchExtractor.class);
-
     private static final String MODE_PROPERTY_KEY = "textsearchextractor.mode";
     private static final String PREFIX_LENGTH_KEY = "textsearchextractor.prefixlength";
     private static final String SUFFIX_LENGTH_KEY = "textsearchextractor.suffixlength";
     private static final String SEARCHSTRING_KEY = "textsearchextractor.searchstring";
     private static final String IGNORE_CASE_KEY = "textsearchextractor.ignorecase";
     private static final String SUPPORTED_FILETYPES = "textsearchextractor.supportedfiletypes";
-
     private static final String DEFAULT_PREFIX = "10";
     private static final String DEFAULT_SUFFIX = "10";
-
-    public static final String RECORD_TYPE = "TextMatch";
-    public static final String MATCH_TEXT_FIELD = "matchText";
-    public static final String IDX_FIELD = "matchStartIdx";
-
     private int prefixLength;
     private int suffixLength;
     private boolean ignoreCase = true;
@@ -39,9 +39,6 @@ public class TextSearchExtractor implements DataExtractor {
     private Mode mode = Mode.FULLTEXT;
     private String searchString;
     private List<String> supportedFiletypes;
-
-
-    public enum Mode {FULLTEXT, FIRST, LAST, ALL}
 
     @Override
     public Collection<DataRecord> extractData(String url, Page page) {
@@ -54,12 +51,12 @@ public class TextSearchExtractor implements DataExtractor {
             body = ((TextPage) page).getContent();
         } else if (page instanceof JavaScriptPage) {
             body = ((JavaScriptPage) page).getContent();
-        }else if (page instanceof UnexpectedPage || page instanceof BinaryPage){
-            if(url.toLowerCase().trim().endsWith(".pdf")){
+        } else if (page instanceof UnexpectedPage || page instanceof BinaryPage) {
+            if (url.toLowerCase().trim().endsWith(".pdf")) {
                 try {
                     body = PdfUtil.extractTextFromPdf(url);
-                }catch(IOException e){
-                    logger.error("Could not extract PDF",e);
+                } catch (IOException e) {
+                    logger.error("Could not extract PDF", e);
                 }
             }
         }
@@ -75,14 +72,14 @@ public class TextSearchExtractor implements DataExtractor {
      */
     private String getBodyFromFile(String fileUrl) {
         File file = new File(fileUrl.replace("file://", "").replace("/", File.separator));
-        if ( file.exists() && file.isFile() && shouldSearch(file.getName())){
-            if(fileUrl.toLowerCase().endsWith(".pdf")){
+        if (file.exists() && file.isFile() && shouldSearch(file.getName())) {
+            if (fileUrl.toLowerCase().endsWith(".pdf")) {
                 try {
                     return PdfUtil.extractTextFromPdf(file);
-                }catch(IOException e){
-                    logger.error("Could not read body from pdf",e);
+                } catch (IOException e) {
+                    logger.error("Could not read body from pdf", e);
                 }
-            }else {
+            } else {
                 BufferedReader reader = null;
                 try {
                     StringBuilder builder = new StringBuilder();
@@ -215,4 +212,6 @@ public class TextSearchExtractor implements DataExtractor {
             searchString = searchString.toUpperCase();
         }
     }
+
+    public enum Mode {FULLTEXT, FIRST, LAST, ALL}
 }
