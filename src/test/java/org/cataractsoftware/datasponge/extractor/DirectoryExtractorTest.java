@@ -17,8 +17,8 @@ import static org.junit.Assert.assertTrue;
 @RunWith(JUnit4.class)
 public class DirectoryExtractorTest {
 
-    private static final String DIR = "file:///Users/chris";
-    private static final String FILE = "file:///Users/chris/test.txt";
+    private static final String DIR = "file:///Users/cfagiani";
+    private static final String FILE = "file:///Users/cfagiani/test.txt";
 
 
     private DirectoryExtractor buildExtractor() {
@@ -41,7 +41,7 @@ public class DirectoryExtractorTest {
     }
 
     @Test
-    public void testFile() throws Exception{
+    public void testFile() throws Exception {
         DataExtractor extractor = buildExtractor();
         Collection<DataRecord> records = extractor.extractData(FILE, null);
         assertNotNull("link extractor should return one result", records);

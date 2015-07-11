@@ -1,7 +1,6 @@
 package org.cataractsoftware.datasponge.extractor;
 
 import com.gargoylesoftware.htmlunit.Page;
-import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import org.cataractsoftware.datasponge.DataAdapter;
 import org.cataractsoftware.datasponge.DataRecord;
 
@@ -21,5 +20,5 @@ public interface DataExtractor extends DataAdapter {
      * @param page page to process
      * @return DataRecord object containing data extracted from the page
      */
-    public Collection<DataRecord> extractData(String url, Page page);
+    Collection<DataRecord> extractData(String url, Page page);
 }

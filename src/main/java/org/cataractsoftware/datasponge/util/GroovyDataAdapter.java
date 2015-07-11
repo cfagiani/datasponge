@@ -2,6 +2,7 @@ package org.cataractsoftware.datasponge.util;
 
 import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyObject;
+import org.cataractsoftware.datasponge.AbstractDataAdapter;
 import org.cataractsoftware.datasponge.DataAdapter;
 
 import java.io.File;
@@ -12,7 +13,7 @@ import java.util.Properties;
  *
  * @author Christopher Fagiani
  */
-public abstract class GroovyDataAdapter implements DataAdapter {
+public abstract class GroovyDataAdapter extends AbstractDataAdapter implements DataAdapter {
 
     private GroovyObject groovyObject;
 
@@ -47,8 +48,8 @@ public abstract class GroovyDataAdapter implements DataAdapter {
             File classFile = new File(val);
             Class groovyClass = loader.parseClass(classFile);
             groovyObject = (GroovyObject) groovyClass.newInstance();
-            if(groovyObject.getMetaClass().respondsTo(groovyObject, "setProperties").size()>0){
-                groovyObject.invokeMethod("setProperties",new Object[]{props});
+            if (groovyObject.getMetaClass().respondsTo(groovyObject, "setProperties").size() > 0) {
+                groovyObject.invokeMethod("setProperties", new Object[]{props});
             }
 
         } catch (Exception e) {

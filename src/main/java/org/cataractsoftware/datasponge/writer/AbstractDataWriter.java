@@ -1,5 +1,6 @@
 package org.cataractsoftware.datasponge.writer;
 
+import org.cataractsoftware.datasponge.AbstractDataAdapter;
 import org.cataractsoftware.datasponge.DataRecord;
 
 import java.util.HashSet;
@@ -11,7 +12,7 @@ import java.util.Properties;
  *
  * @author Christopher Fagiani
  */
-public abstract class AbstractDataWriter implements DataWriter {
+public abstract class AbstractDataWriter extends AbstractDataAdapter implements DataWriter {
 
     private final HashSet<DataRecord> dataRecordSet = new HashSet<DataRecord>();
 

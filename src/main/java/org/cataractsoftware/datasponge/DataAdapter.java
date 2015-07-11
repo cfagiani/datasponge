@@ -14,5 +14,7 @@ public interface DataAdapter {
      *
      * @param props initialized property object containing all properties used to load the program
      */
-    public void init(Properties props);
+    void init(Properties props);
+
+    void setJobId(String jobId);
 }

@@ -16,17 +16,17 @@ public interface DataWriter extends DataAdapter {
      *
      * @param record DataRecord to add
      */
-    public void addItem(DataRecord record);
+    void addItem(DataRecord record);
 
     /**
      * flush the list of work to be written
      */
-    public void flushBatch();
+    void flushBatch();
 
     /**
      * called by the system just prior to a normal shutdown.
      */
-    public void finish();
+    void finish();
 
 
 }

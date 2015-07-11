@@ -1,15 +1,13 @@
 package org.cataractsoftware.datasponge.extractor;
 
 import com.gargoylesoftware.htmlunit.Page;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.util.PDFTextStripper;
+import org.cataractsoftware.datasponge.AbstractDataAdapter;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.util.PdfUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Properties;
@@ -17,13 +15,15 @@ import java.util.Properties;
 /**
  * extracts the textual content of a PDF document and stores it in a data record with a single field named "text". For most practical
  * uses, users should subclass this class and override the processText method to suit the needs of the application.
+ *
  * @author Christopher Fagiani
  */
-public class PdfTextExtractor implements DataExtractor {
+public class PdfTextExtractor extends AbstractDataAdapter implements DataExtractor {
     private Logger logger = LoggerFactory.getLogger(PdfTextExtractor.class);
 
     /**
      * extracts text data from a PDF and returns a set of DataRecords. This method will read the document into a single string and call the processText method to build the DataRecords.
+     *
      * @param url  url of page being processed
      * @param page page to process
      * @return
@@ -43,6 +43,7 @@ public class PdfTextExtractor implements DataExtractor {
     /**
      * Builds a single DataRecord with a field called "text" containing the entire document. This method can be overridden to provide
      * application-specific parsing of PDFs.
+     *
      * @param url
      * @param allText
      * @return

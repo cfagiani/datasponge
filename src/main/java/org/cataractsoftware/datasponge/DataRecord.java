@@ -1,5 +1,6 @@
 package org.cataractsoftware.datasponge;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -9,7 +10,7 @@ import java.util.Set;
  *
  * @author Christopher Fagiani
  */
-public class DataRecord {
+public class DataRecord implements Serializable {
     private String identifier;
     private String type;
 

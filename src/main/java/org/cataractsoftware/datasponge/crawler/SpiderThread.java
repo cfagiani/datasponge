@@ -4,8 +4,6 @@ import com.gargoylesoftware.htmlunit.BrowserVersion;
 import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
 import com.gargoylesoftware.htmlunit.Page;
 import com.gargoylesoftware.htmlunit.WebClient;
-import net.sourceforge.htmlunit.corejs.javascript.EcmaError;
-import net.sourceforge.htmlunit.corejs.javascript.RhinoException;
 import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.enhancer.DataEnhancer;
 import org.cataractsoftware.datasponge.extractor.DataExtractor;
@@ -32,27 +30,21 @@ import java.util.Map;
  */
 public class SpiderThread implements Runnable {
 
-    private static final Logger logger = LoggerFactory.getLogger(SpiderThread.class);
-
+    public static final int MAX_IDLE_ITERATIONS = 2;
+    public static final int BACKOFF_INTERVAL = 10000;
+    private static final Logger logger = LoggerFactory
+            .getLogger(SpiderThread.class);
     private CrawlerWorkqueue queue;
     private volatile boolean busy;
-
     private DataWriter outputCollector;
     private String proxy;
     private int port;
-
-    public static final int MAX_IDLE_ITERATIONS = 2;
-    public static final int BACKOFF_INTERVAL = 10000;
     private DataExtractor extractor;
     private DataExtractor dirExtractor;
     private DataExtractor linkExtractor;
     private DataEnhancer[] dataEnhancers;
     private WebClient webClient;
     private WebClient backupWebClient;
-
-    public boolean isBusy() {
-        return busy;
-    }
 
     /**
      * creates a new SpiderThread object that will add its output to the
@@ -64,12 +56,13 @@ public class SpiderThread implements Runnable {
      * @param collector initialized DataWriter instance
      * @param enhancers optional array of data enhancers
      */
-    public SpiderThread(String proxy, int port, DataWriter collector,
-                        DataExtractor extractor, DataEnhancer... enhancers) {
+    public SpiderThread(String proxy, int port, CrawlerWorkqueue workQueue,
+                        DataWriter collector, DataExtractor extractor,
+                        DataEnhancer... enhancers) {
         this.proxy = proxy;
         this.port = port;
 
-        queue = CrawlerWorkqueue.getInstance();
+        queue = workQueue;
         this.extractor = extractor;
         this.dirExtractor = new DirectoryExtractor();
         this.linkExtractor = new HyperlinkExtractor();
@@ -78,6 +71,10 @@ public class SpiderThread implements Runnable {
         dataEnhancers = enhancers;
         webClient = initializeWebClient(false);
         backupWebClient = initializeWebClient(true);
+    }
+
+    public boolean isBusy() {
+        return busy;
     }
 
     /**
@@ -107,18 +104,23 @@ public class SpiderThread implements Runnable {
                     idleIterations = 0;
                     Page page = processItem(url);
                     if (page != null) {
-                        Collection<DataRecord> drColl = extractor.extractData(url, page);
+                        Collection<DataRecord> drColl = extractor.extractData(
+                                url, page);
                         if (drColl != null) {
 
                             for (DataRecord dr : drColl) {
                                 if (dataEnhancers != null) {
                                     for (DataEnhancer enhancer : dataEnhancers) {
                                         if (enhancer != null) {
-                                            dr = enhancer.enhanceData(dr);
+                                            if (dr != null) {
+                                                dr = enhancer.enhanceData(dr);
+                                            }
                                         }
                                     }
                                 }
-                                outputCollector.addItem(dr);
+                                if (dr != null) {
+                                    outputCollector.addItem(dr);
+                                }
                             }
                         }
                     }
@@ -137,9 +139,13 @@ public class SpiderThread implements Runnable {
     }
 
     /**
-     * attempts to process the item identified by thisPage in order to find additional items to process. If thisPage refers to a local directory,
-     * the DirectoryExtractor will be used to obtain a list of contents which will be added to the workqueue.. If thisPage refers to a file (either local or remote), a Page will be returned containing the content.
-     * If the page is an HtmlPage, it will be searched for additional links and, if found, they will be added to the workqueue.
+     * attempts to process the item identified by thisPage in order to find
+     * additional items to process. If thisPage refers to a local directory, the
+     * DirectoryExtractor will be used to obtain a list of contents which will
+     * be added to the workqueue.. If thisPage refers to a file (either local or
+     * remote), a Page will be returned containing the content. If the page is
+     * an HtmlPage, it will be searched for additional links and, if found, they
+     * will be added to the workqueue.
      *
      * @param thisPage
      * @return
@@ -151,27 +157,33 @@ public class SpiderThread implements Runnable {
                 records = dirExtractor.extractData(thisPage, null);
                 if (records != null) {
                     for (DataRecord r : records) {
-                        if (DirectoryExtractor.DIR_RECORD_TYPE.equals(r.getType())) {
-                            for (Map.Entry<String, Object> field : r.getFields()) {
+                        if (DirectoryExtractor.DIR_RECORD_TYPE.equals(r
+                                .getType())) {
+                            for (Map.Entry<String, Object> field : r
+                                    .getFields()) {
                                 String link = (String) field.getValue();
-                                if (link != null && !link.trim().equals(".") && !link.trim().equals("..")) {
+                                if (link != null && !link.trim().equals(".")
+                                        && !link.trim().equals("..")) {
                                     queue.enqueue(link, thisPage);
                                 }
                             }
-                        } else if (DirectoryExtractor.FILE_RECORD_TYPE.equals(r.getType())) {
-                            return processFile(thisPage,false);
+                        } else if (DirectoryExtractor.FILE_RECORD_TYPE.equals(r
+                                .getType())) {
+                            return processFile(thisPage, false);
                         }
                     }
                 }
             } else {
-                return processFile(thisPage,true);
+                return processFile(thisPage, true);
             }
         }
         return null;
     }
 
     /**
-     * processes a page by first attempting to read it with the webClient. If the page returned is a HtmlPage, the links will be extracted and added to the workqueue prior to returning the page data.
+     * processes a page by first attempting to read it with the webClient. If
+     * the page returned is a HtmlPage, the links will be extracted and added to
+     * the workqueue prior to returning the page data.
      *
      * @param thisPage
      * @param extractLinks - indicates whether links should be parsed from the page
@@ -179,15 +191,19 @@ public class SpiderThread implements Runnable {
      */
     private Page processFile(String thisPage, boolean extractLinks) {
         try {
-            //TODO: this can fail if running offline and the page attempts to load remote JS
+            // TODO: this can fail if running offline and the page attempts to
+            // load remote JS
             Page page = fetchPage(thisPage);
             if (extractLinks) {
-                Collection<DataRecord> records = linkExtractor.extractData(thisPage, page);
+                Collection<DataRecord> records = linkExtractor.extractData(
+                        thisPage, page);
                 if (records != null) {
                     for (DataRecord r : records) {
                         for (Map.Entry<String, Object> field : r.getFields()) {
                             String link = (String) field.getValue();
-                            if (link != null && !link.toLowerCase().startsWith("mailto:")) {
+                            if (link != null
+                                    && !link.toLowerCase()
+                                    .startsWith("mailto:")) {
                                 queue.enqueue(link, thisPage);
                             }
                         }
@@ -207,34 +223,34 @@ public class SpiderThread implements Runnable {
         return null;
     }
 
-    private Page fetchPage(String url) throws IOException, MalformedURLException{
+    private Page fetchPage(String url) throws IOException {
         Page p = null;
-        try{
+        try {
             p = webClient.getPage(url);
-        }catch(RuntimeException rEx){
-            logger.warn("Could not load page with normal client. Trying backup",rEx);
+        } catch (RuntimeException rEx) {
+            logger.warn(
+                    "Could not load page with normal client. Trying backup");
             p = backupWebClient.getPage(url);
         }
         return p;
     }
 
-
     /**
      * initializes the WebClient object that will be used to fetch and parse web
      * pages
      *
-     * @return new instance of WebClient that can be used to load and parse pages
+     * @return new instance of WebClient that can be used to load and parse
+     * pages
      */
     private WebClient initializeWebClient(boolean minimal) {
 
         WebClient client = null;
-        if (proxy != null) {
-            client = new WebClient(BrowserVersion.CHROME,
-                    proxy, port);
+        if (proxy != null && !proxy.trim().isEmpty()) {
+            client = new WebClient(BrowserVersion.CHROME, proxy, port);
         } else {
-            client= new WebClient(BrowserVersion.CHROME);
+            client = new WebClient(BrowserVersion.CHROME);
         }
-        if(minimal){
+        if (minimal) {
             client.getOptions().setAppletEnabled(false);
             client.getOptions().setJavaScriptEnabled(false);
             client.getOptions().setCssEnabled(false);

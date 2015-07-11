@@ -1,52 +1,57 @@
 package org.cataractsoftware.datasponge;
 
-import org.cataractsoftware.datasponge.crawler.CrawlerWorkqueue;
-import org.cataractsoftware.datasponge.crawler.SpiderThread;
-import org.cataractsoftware.datasponge.enhancer.DataEnhancer;
-import org.cataractsoftware.datasponge.extractor.DataExtractor;
-import org.cataractsoftware.datasponge.writer.DataWriter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.activemq.ActiveMQConnectionFactory;
+import org.cataractsoftware.datasponge.engine.JobCoordinator;
+import org.cataractsoftware.datasponge.model.Job;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.support.AbstractApplicationContext;
+import org.springframework.jms.annotation.EnableJms;
+import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
+import org.springframework.jms.core.JmsMessagingTemplate;
+import org.springframework.jms.core.JmsTemplate;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import javax.jms.ConnectionFactory;
+import java.io.File;
 import java.util.*;
 
 /**
- * Utility to spider a web site and extract data from pages. The utility is configured through a property file (path to the file is passed in as a command line argument).
+ * Utility to spider a web site and extract data from pages. The utility is
+ * configured through a property file (path to the file is passed in as a
+ * command line argument).
  * <p/>
- * The sponge will start at a set of given URLs, crawl all links and parse the results. The scope of the crawl can be narrowed using inclusion/exclusion regular expressions (set in the properties file).
- * As it crawls, data will be added to an internal collection. This collection is periodically flushed to facilitate batch submission.
+ * The sponge will start at a set of given URLs, crawl all links and parse the
+ * results. The scope of the crawl can be narrowed using inclusion/exclusion
+ * regular expressions (set in the properties file). As it crawls, data will be
+ * added to an internal collection. This collection is periodically flushed to
+ * facilitate batch submission.
  * <p/>
- * The utility is meant to be extended by users, supplying their own DataExtractor and DataWriter instances as needed.
+ * The utility is meant to be extended by users, supplying their own
+ * DataExtractor and DataWriter instances as needed.
  *
  * @author Christopher Fagiani
  */
+@SpringBootApplication
+@EnableJms
 public class DataSponge {
 
-    private static final Logger logger = LoggerFactory.getLogger(DataSponge.class);
-    private static final String PROXYHOST = "proxyhost";
-    private static final String PROXYPORT = "proxyport";
-    private static final String STARTURLS = "starturls";
-    private static final String IGNOREPATTERNS = "ignorepatterns";
-    private static final String MAXTHREADS = "maxthreads";
-    private static final String INTERVAL = "sleepinterval";
-    private static final String INCLUDES = "includepatterns";
-    private static final String DATAEXTRACTOR = "dataextractor";
-    private static final String DATAENHANCER = "dataenhancer";
-    private static final String DATAWRITER = "datawriter";
-    private static final String MODE = "mode";
-    private static final String CRAWLINTERVAL = "crawlinterval";
-    private static final String CONTINUOUS_MODE = "continuous";
-    private static final String SINGLE_MODE = "once";
+    private static final Logger logger = LoggerFactory
+            .getLogger(DataSponge.class);
+    private static final long TERMINATE_CHECK_INTERVAL = 5000;
+    private static Timer jobProgressTimer;
     private Properties props;
-    private CrawlerWorkqueue queue;
-    private long sleepInterval;
+    @Value("${proxyhost}")
     private String proxy;
+    @Value("${proxyport}")
     private int port;
-    private String mode = SINGLE_MODE;
-    private long crawlIntervalSeconds = 600;
+    @Value("${jms.broker.url}")
+    private String jmsBrokerUrl;
 
 
     /**
@@ -59,47 +64,168 @@ public class DataSponge {
     }
 
     /**
-     * default constructor. If this is uses, all config options needs to be set prior to calling the executeCrawl method.
+     * default constructor. If this is uses, all config options needs to be set
+     * prior to calling the executeCrawl method.
      */
     public DataSponge() {
         props = new Properties();
     }
 
-    public void setMaxThreads(int threads) {
-        props.setProperty(MAXTHREADS, String.valueOf(threads));
+    /**
+     * main method for this program. It checks the command line arguments and,
+     * if valid, loads the properties and instantiates an object of this class.
+     * Once the object is instantiated it will initialize it and then start the
+     * crawl process.
+     *
+     * @param args command line arguments containing the path to the property
+     *             file
+     */
+    public static void main(String[] args) {
+        File jobFile = null;
+        boolean isSingleJob = false;
+        boolean useEmbeddedBroker = false;
+        boolean enableRest = false;
+        if (args.length > 0) {
+            List<String> argList = Arrays.asList(args);
+            if (argList.contains("--help") || argList.contains("?")) {
+                printHelp();
+                System.exit(0);
+            }
+
+            if (argList.contains("--server")) {
+                useEmbeddedBroker = true;
+            }
+            if (argList.contains("--restapi")) {
+                enableRest = true;
+            }
+
+            int jobIdx = argList.indexOf("--job");
+            if (jobIdx != -1) {
+                jobFile = new File(argList.get(jobIdx + 1));
+            }
+            if (argList.contains("--singleJob")) {
+                isSingleJob = true;
+            }
+            initialize(useEmbeddedBroker, enableRest, isSingleJob, jobFile, args);
+        }
+        System.out.println("Starting app...");
+
     }
 
-    public void setProxy(String host, int port) {
-        props.setProperty(PROXYHOST, host);
-        props.setProperty(PROXYPORT, String.valueOf(port));
+    public static void initialize(boolean useEmbeddedBroker, boolean enableRest, boolean isSingleJob, File jobFile, String[] args) {
+        SpringApplication app = new SpringApplication(DataSponge.class);
+        List<String> enabledProfiles = new ArrayList<>();
+        if (useEmbeddedBroker) {
+            enabledProfiles.add("broker");
+        }
+        if (enableRest) {
+            enabledProfiles.add("restapi");
+        }
+        if (enabledProfiles.size() > 0) {
+            app.setAdditionalProfiles(enabledProfiles.toArray(new String[enabledProfiles.size()]));
+        }
+        ApplicationContext context = app.run(args);
+        JobCoordinator coord = context.getBean(JobCoordinator.class);
+        if (jobFile != null) {
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                Job j = coord.submitJob(mapper.readValue(jobFile, Job.class));
+                if (j != null) {
+                    logger.info("Submitted job " + j.getGuid());
+                }
+            } catch (Exception e) {
+                logger.error("Could not submit job from file", e);
+            }
+        }
+        if (isSingleJob) {
+
+            terminateUponCompletion(context, coord);
+        }
     }
 
-    public void setStartUrls(String urlList) {
-        props.setProperty(STARTURLS, urlList);
+    private static void printHelp() {
+        StringBuilder builder = new StringBuilder(String.format("Usage: java %s [--help] [--job <pathToJobFile>] [--server] [--singleJob] [--restapi]", DataSponge.class.getCanonicalName()));
+        builder.append("\n--help: shows this message and exits");
+        builder.append("\n--job <pathToJobFile>: automatically submits the job described by the file to the system and executes it");
+        builder.append("\n--server: indicates that this node should run the message broker. Only 1 node in an ensemble should be run with this option");
+        builder.append("\n--singleJob: indicates that the system should terminate after processing a single job");
+        System.out.println(builder.toString());
     }
 
-    public void setSleepInterval(int intervalMillis) {
-        props.setProperty(INTERVAL, String.valueOf(intervalMillis));
+    private static void terminateUponCompletion(final ApplicationContext context, final JobCoordinator coordinator) {
+        jobProgressTimer = new Timer();
+        jobProgressTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                if (coordinator.areAllJobsDone()) {
+                    ((AbstractApplicationContext) context).close();
+                    jobProgressTimer.cancel();
+                }
+            }
+        }, TERMINATE_CHECK_INTERVAL, TERMINATE_CHECK_INTERVAL);
     }
 
-    public void setIncludePatterns(String patterns) {
-        props.setProperty(INCLUDES, patterns);
+
+    @Bean
+    public ConnectionFactory connectionFactory() {
+        return new ActiveMQConnectionFactory(getJmsBrokerUrl());
     }
 
-    public void setExcludePatterns(String patterns) {
-        props.setProperty(IGNOREPATTERNS, patterns);
+    @Bean
+    public JmsTemplate jobTopicTemplate() {
+        JmsTemplate template = new JmsTemplate(connectionFactory());
+        template.setDefaultDestinationName("datasponge.job.topic");
+        template.setPubSubDomain(true);
+        return template;
+
     }
 
-    public void setWriterClass(String className) {
-        props.setProperty(DATAWRITER, className);
+    @Bean
+    public JmsTemplate ouputJmsTemplate() {
+        JmsTemplate template = new JmsTemplate(connectionFactory());
+        template.setDefaultDestinationName("datasponge.output.topic");
+        template.setPubSubDomain(true);
+        return template;
     }
 
-    public void setExtractorClass(String className) {
-        props.setProperty(DATAEXTRACTOR, className);
+    @Bean
+    public JmsTemplate managementTopicTemplate() {
+        JmsTemplate template = new JmsTemplate(connectionFactory());
+        template.setDefaultDestinationName("datasponge.management.topic");
+        template.setPubSubDomain(true);
+        return template;
     }
+
+    @Bean
+    public JmsTemplate workQueueTemplate() {
+        JmsTemplate template = new JmsTemplate(connectionFactory());
+        template.setDefaultDestinationName("datasponge.workqueue.topic");
+        template.setPubSubDomain(true);
+        return template;
+    }
+
+    @Bean
+        // this is here to bypass errors with auto-configuration since we have
+        // multiple JMS templates
+    JmsMessagingTemplate jmsMessagingTemplate() {
+        return new JmsMessagingTemplate(jobTopicTemplate());
+    }
+
+    @Bean
+    public DefaultJmsListenerContainerFactory topicContainerFactory() {
+        DefaultJmsListenerContainerFactory factory = new DefaultJmsListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory());
+        // for this connection factory, we only want 1 instance; increasing this
+        // will result in multiple copies of the same message locally
+        factory.setConcurrency("1-1");
+        factory.setPubSubDomain(true);
+        return factory;
+    }
+
 
     /**
-     * sets additional properties (use if you need to set properties needed by custom extractors/writers)
+     * sets additional properties (use if you need to set properties needed by
+     * custom extractors/writers)
      *
      * @param name
      * @param value
@@ -109,276 +235,7 @@ public class DataSponge {
     }
 
 
-    /**
-     * main method for this program. It checks the command line arguments and,
-     * if valid, loads the properties and instantiates an object of this class.
-     * Once the object is instantiated it will initialize it and then start the
-     * crawl process.
-     *
-     * @param args command line arguments containing the path to the property file
-     */
-    public static void main(String[] args) {
-        Properties props = null;
-
-        if (args.length != 1) {
-            System.out.println("Incorrect command line arguments.\n");
-            printUsage();
-            System.exit(0);
-        }
-
-        try {
-            props = loadProps(args[0]);
-        } catch (IOException e) {
-            logger.error("Cannot load config file: ", e);
-            System.exit(1);
-        }
-        DataSponge sponge = new DataSponge(props);
-        sponge.executeCrawl();
-    }
-
-    /**
-     * creates N new SpiderThread objects (where N is the maxthreads property),
-     * all of which point to the same Collector object. It will then spawn a new
-     * thread for each SpiderThread object and start them. Once all threads are
-     * started, this method will loop over the following steps until all threads
-     * are idle:<br>
-     * <ul>
-     * <li>check if any thread is still busy</li>
-     * <li>flush the collector</li>
-     * <li>sleep for X milliseconds (configured via sleepinterval property)</li>
-     * </ul>
-     * <br>
-     * once the threads are all idle, the collector will be closed and the
-     * program will terminate.
-     */
-    public void executeCrawl() {
-        init();
-        long startTime = System.currentTimeMillis();
-        int threadCount = 5;
-        if (props.getProperty(MAXTHREADS) != null) {
-            threadCount = Integer.parseInt(props.getProperty(MAXTHREADS));
-        }
-
-        DataExtractor extractor = getNewDataAdapter(props.getProperty(DATAEXTRACTOR), props);
-        boolean done = false;
-        while (!done) {
-            long iterStartTime = System.currentTimeMillis();
-            DataWriter outputCollector = getNewDataAdapter(props.getProperty(DATAWRITER), props);
-
-            DataEnhancer[] enhancers = getNewDataAdapterPipeline(props.getProperty(DATAENHANCER), props);
-
-            seedQueue(queue, parseList(props.getProperty(STARTURLS)));
-
-
-            List<SpiderThread> threadList = spawnThreads(threadCount,
-                    outputCollector, extractor, enhancers);
-
-            while (areStillWorking(threadList)) {
-                try {
-                    writeIncrementalOutput(outputCollector);
-                    Thread.sleep(sleepInterval);
-                } catch (InterruptedException e) {
-                    logger.error("thread interrupted", e);
-                } catch (IOException e) {
-                    logger.error("Couldn't write incremental output", e);
-                }
-            }
-            outputCollector.finish();
-            logger.info("Crawl iteration took {} seconds", ((System.currentTimeMillis() - iterStartTime) / 1000));
-            if (SINGLE_MODE.equalsIgnoreCase(mode)) {
-                done = true;
-            } else {
-                try {
-                    Thread.sleep(crawlIntervalSeconds * 1000);
-                } catch (InterruptedException iEx) {
-                    logger.error("Thread interrupt while sleeping between crawl iterations", iEx);
-                }
-            }
-        }
-        long totalTime = System.currentTimeMillis() - startTime;
-        logger.info("Crawl ran for {} seconds", (totalTime / 1000));
-    }
-
-    /**
-     * flushes the outputCollector and prints the current size of the queue to
-     * standard out
-     *
-     * @param outputCollector initialized DataWriter instance that will collect data as it is discovered
-     * @throws IOException
-     */
-    private void writeIncrementalOutput(DataWriter outputCollector)
-            throws IOException {
-        outputCollector.flushBatch();
-        logger.info("Queue Size: {}", queue.getSize());
-    }
-
-    /**
-     * checks to see if any of the SpiderThreads in the threadList are still
-     * working. If so, it returns true, if not, return false.
-     *
-     * @param threadList list of SpiderThreads
-     * @return true if one or more threads are still busy
-     */
-    private boolean areStillWorking(List<SpiderThread> threadList) {
-        for (SpiderThread st : threadList) {
-            if (st.isBusy()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * create threadCount new SpiderThreads and start them.
-     *
-     * @param threadCount     number of threads to spawn
-     * @param outputCollector initialized DataWriter instance that will collect data as it is discovered
-     * @param extractor       initialized DataExtractor instance that will extract data from each page
-     * @param enhancers       optional list of data enhancers
-     * @return - list of running threads
-     */
-    private List<SpiderThread> spawnThreads(int threadCount,
-                                            DataWriter outputCollector, DataExtractor extractor, DataEnhancer... enhancers) {
-        List<SpiderThread> threadList = new ArrayList<SpiderThread>();
-        for (int i = 0; i < threadCount; i++) {
-            SpiderThread st = new SpiderThread(proxy, port, outputCollector,
-                    extractor, enhancers);
-            threadList.add(st);
-            Thread t = new Thread(st);
-            t.start();
-        }
-        return threadList;
-    }
-
-    /**
-     * initializes the crawler program by loading the properties, creating the
-     * common work queue and seeding it with the list of URLs at which to start.
-     */
-    private void init() {
-        try {
-            proxy = props.getProperty(PROXYHOST);
-            port = 0;
-            if (props.getProperty(PROXYPORT) != null) {
-                port = Integer.parseInt(props.getProperty(PROXYPORT));
-            }
-            sleepInterval = 10000;
-            if (props.getProperty(INTERVAL) != null) {
-                sleepInterval = Integer.parseInt(props.getProperty(INTERVAL));
-            }
-
-            queue = CrawlerWorkqueue.createInstance(parseList(props
-                    .getProperty(IGNOREPATTERNS)), parseList(props
-                    .getProperty(INCLUDES)));
-            mode = props.getProperty(MODE, SINGLE_MODE);
-            crawlIntervalSeconds = Long.parseLong(props.getProperty(CRAWLINTERVAL, "600"));
-        } catch (Exception e) {
-            logger.error("Could not initialize the system.", e);
-            System.exit(1);
-        }
-
-    }
-
-    /**
-     * prints command line argument usage
-     */
-    public static void printUsage() {
-        System.out.println("Usage:\njava org.cataractsoftware.datasponge DataSponge <configFile>");
-    }
-
-    /**
-     * loads the property file designated by file into a Properties object and
-     * returns it to caller.
-     *
-     * @param file fully qualified file name for property file
-     * @return Properties object loaded with values from file
-     * @throws IOException
-     */
-    public static Properties loadProps(String file) throws IOException {
-        Properties props = new Properties();
-        InputStream propertyStream = new FileInputStream(file);
-        props.load(propertyStream);
-        propertyStream.close();
-        return props;
-    }
-
-    /**
-     * parses a string that contains a comma-delimited list of values and
-     * returns them as a HashSet
-     *
-     * @param list string that contains a comma-delimited list of values
-     * @return set of strings parsed from the input
-     */
-    private static HashSet<String> parseList(String list) {
-        HashSet<String> set = new HashSet<String>();
-        if (list != null) {
-            StringTokenizer strTok = new StringTokenizer(list, ",");
-            while (strTok.hasMoreTokens()) {
-                set.add(strTok.nextToken());
-            }
-        }
-        return set;
-    }
-
-    /**
-     * iterates over each entry in list and adds them to the work queue
-     *
-     * @param queue work queue of pending pages (links discovered but not yet visited)
-     * @param list  list of urls to add to queue
-     */
-    private static void seedQueue(CrawlerWorkqueue queue, HashSet<String> list) {
-        queue.reset();
-        if (list != null) {
-            for (String item : list) {
-                queue.enqueue(item, null);
-            }
-        }
-    }
-
-    /**
-     * helper method to reflectively instantiate and initialize the pluggable DataAdapter components (DataExtractor and DataWriter instances).
-     *
-     * @param className class to instantiate
-     * @param props     property object containing all the properties from the property file used to run the program
-     * @param <T>       subtype of DataAdapter
-     * @return initialized instance of T
-     */
-    @SuppressWarnings("unchecked")
-    private <T extends DataAdapter> T getNewDataAdapter(String className, Properties props) {
-        if (className != null && className.trim().length() > 0) {
-            try {
-                Class writerClass = Class.forName(className);
-                T adapter = (T) writerClass.newInstance();
-                adapter.init(props);
-                return adapter;
-            } catch (ReflectiveOperationException ex) {
-                throw new RuntimeException("Could not instantiate " + className + " as DataAdapter. Ensure " + DATAWRITER + " property is a fully qualified class name and it is on the classpath", ex);
-            }
-        } else {
-            return null;
-        }
-    }
-
-    /**
-     * helper to initialize an array of DataAdapter components.
-     * It is assumed that the fully-qualified class names of each component is passed in a comma-delmited string via the pipelineClasses argument.
-     *
-     * @param pipelineClasses comma delimited string containing the FQN of each dataAdapter class
-     * @param props           property object
-     * @return array of T
-     */
-    private <T extends DataAdapter> T[] getNewDataAdapterPipeline(String pipelineClasses, Properties props) {
-        T[] adapters = null;
-        if (pipelineClasses != null && pipelineClasses.trim().length() > 0) {
-            String[] classNameArray = pipelineClasses.split(",");
-            List<T> pipeline = new ArrayList<T>();
-            for (String className : classNameArray) {
-                T item = getNewDataAdapter(className, props);
-                if (item != null) {
-                    pipeline.add(item);
-                }
-            }
-            adapters = pipeline.toArray(adapters);
-        }
-        return adapters;
+    private String getJmsBrokerUrl() {
+        return jmsBrokerUrl;
     }
 }

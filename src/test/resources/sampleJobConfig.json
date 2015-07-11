@@ -1,0 +1,34 @@
+{
+  "jobName": "TestJob",
+  "submissionTime": 1429967784265,
+  "startUrls": [
+    "http://www.cataractsoftware.com/"
+  ],
+  "includePatterns": [
+    ".*www.cataractsoftware.com.*"
+  ],
+  "ignorePatterns": [
+    ".*.js",
+    ".*.css"
+  ],
+  "maxThreads": 1,
+  "dataExtractor": {
+    "type": "DATA_EXTRACTOR",
+    "className": "org.cataractsoftware.datasponge.extractor.HyperlinkExtractor",
+    "pluginProperties": null
+  },
+  "dataWriter": {
+    "type": "DATA_WRITER",
+    "className": "org.cataractsoftware.datasponge.writer.JmsDataWriter",
+    "pluginProperties": {
+      "jmsDestination": "datasponge.output.topic"
+    }
+  },
+  "coordinatorDataWriter": {
+    "type": "DATA_WRITER",
+    "className": "org.cataractsoftware.datasponge.writer.PrintWriter",
+    "pluginProperties": {}
+  },
+  "status": "SUBMITTED",
+  "mode": "ONCE"
+}

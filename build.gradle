@@ -1,10 +1,20 @@
-version = '1.0'
+version = '2.0-SNAPSHOT'
 group = 'org.cataractsoftware.datasponge'
+
 
 
 apply plugin: 'java'
 //this gives us the "install" goal
 apply plugin: 'maven'
+apply plugin: 'spring-boot'
+
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        dependencies { classpath("org.springframework.boot:spring-boot-gradle-plugin:1.2.3.RELEASE") }
+    }
+}
 
 
 repositories {
@@ -14,10 +24,20 @@ repositories {
 
 dependencies {
     compile 'net.sourceforge.htmlunit:htmlunit:2.13'
-    compile 'org.slf4j:slf4j-api:1.7.5'
-    compile 'org.slf4j:jcl-over-slf4j:1.7.5'
-    compile 'ch.qos.logback:logback-classic:1.0.13'
     compile 'org.codehaus.groovy:groovy-all:2.2.1'
     compile 'org.apache.pdfbox:pdfbox:1.8.8'
+    compile 'org.springframework.boot:spring-boot-starter-web:1.2.3.RELEASE'
+    compile 'org.springframework.boot:spring-boot-starter-actuator:1.2.3.RELEASE'
+    compile 'org.springframework:spring-jms:4.1.6.RELEASE'
+    compile 'org.apache.activemq:activemq-broker:5.10.1'
+
     testCompile 'junit:junit:4.11'
+}
+
+jar { baseName = 'datasponge' }
+
+install {
+    repositories.mavenInstaller {
+        pom.artifactId = 'datasponge'
+    }
 }
