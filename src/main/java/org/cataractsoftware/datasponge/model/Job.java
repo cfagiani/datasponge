@@ -27,6 +27,7 @@ public class Job {
     private String guid;
     private String coordinatorId;
     private Long continuousCrawlInterval;
+
     public Job() {
         submissionTime = new Date();
         status = Status.SUBMITTED;

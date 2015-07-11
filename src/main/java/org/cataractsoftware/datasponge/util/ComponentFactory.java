@@ -22,6 +22,7 @@ import java.util.List;
 public class ComponentFactory implements ApplicationContextAware {
 
     private ApplicationContext applicationContext;
+
     /**
      * helper method to reflectively instantiate and initialize the pluggable
      * DataAdapter components (DataExtractor and DataWriter instances).
@@ -39,9 +40,9 @@ public class ComponentFactory implements ApplicationContextAware {
                 T adapter = null;
                 try {
                     adapter = (T) applicationContext.getBean(writerClass);
-                }catch(NoSuchBeanDefinitionException ex){
+                } catch (NoSuchBeanDefinitionException ex) {
                     //try to instantiate as non-spring class
-                    adapter = (T)writerClass.newInstance();
+                    adapter = (T) writerClass.newInstance();
                 }
                 adapter.init(adapterConf.getPluginProperties());
                 adapter.setJobId(jobId);
@@ -69,12 +70,12 @@ public class ComponentFactory implements ApplicationContextAware {
      * @return array of T
      */
     public <T extends DataAdapter> T[] getNewDataAdapterPipeline(String jobId,
-            PluginConfig[] pipelineStages) {
+                                                                 PluginConfig[] pipelineStages) {
         T[] adapters = null;
         if (pipelineStages != null) {
             for (PluginConfig conf : pipelineStages) {
                 List<T> pipeline = new ArrayList<T>();
-                T item = getNewDataAdapter(jobId,conf);
+                T item = getNewDataAdapter(jobId, conf);
                 if (item != null) {
                     pipeline.add(item);
                 }

@@ -69,7 +69,7 @@ public class JobExecutor {
         Thread crawlThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                DataExtractor extractor = componentFactory.getNewDataAdapter(jobDefinition.getGuid(),jobDefinition
+                DataExtractor extractor = componentFactory.getNewDataAdapter(jobDefinition.getGuid(), jobDefinition
                         .getDataExtractor());
                 long startTime = System.currentTimeMillis();
                 while (!done) {
@@ -111,11 +111,12 @@ public class JobExecutor {
 
                 long totalTime = System.currentTimeMillis() - startTime;
                 logger.info("Crawl ran for {} seconds", (totalTime / 1000));
-            }});
+            }
+        });
         crawlThread.start();
     }
 
-    public boolean isDone(){
+    public boolean isDone() {
         return done;
     }
 
@@ -201,6 +202,9 @@ public class JobExecutor {
         }
     }
 
+    public void destroy() {
+
+    }
 
 
 }

@@ -2,7 +2,6 @@ package org.cataractsoftware.datasponge;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.activemq.ActiveMQConnectionFactory;
-import org.cataractsoftware.datasponge.crawler.CrawlerWorkqueue;
 import org.cataractsoftware.datasponge.engine.JobCoordinator;
 import org.cataractsoftware.datasponge.model.Job;
 import org.slf4j.Logger;
@@ -12,6 +11,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.jms.annotation.EnableJms;
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
 import org.springframework.jms.core.JmsMessagingTemplate;
@@ -19,9 +19,6 @@ import org.springframework.jms.core.JmsTemplate;
 
 import javax.jms.ConnectionFactory;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
 
 /**
@@ -46,6 +43,8 @@ public class DataSponge {
 
     private static final Logger logger = LoggerFactory
             .getLogger(DataSponge.class);
+    private static final long TERMINATE_CHECK_INTERVAL = 5000;
+    private static Timer jobProgressTimer;
     private Properties props;
     @Value("${proxyhost}")
     private String proxy;
@@ -53,6 +52,7 @@ public class DataSponge {
     private int port;
     @Value("${jms.broker.url}")
     private String jmsBrokerUrl;
+
 
     /**
      * constructs a new object using the properties loaded into p
@@ -81,82 +81,90 @@ public class DataSponge {
      *             file
      */
     public static void main(String[] args) {
-        SpringApplication app = new SpringApplication(DataSponge.class);
         File jobFile = null;
-        boolean isServer = false;
+        boolean isSingleJob = false;
+        boolean useEmbeddedBroker = false;
+        boolean enableRest = false;
         if (args.length > 0) {
             List<String> argList = Arrays.asList(args);
-            if (argList.contains("--server")) {
-                isServer = true;
-                app.setAdditionalProfiles("broker");
+            if (argList.contains("--help") || argList.contains("?")) {
+                printHelp();
+                System.exit(0);
             }
+
+            if (argList.contains("--server")) {
+                useEmbeddedBroker = true;
+            }
+            if (argList.contains("--restapi")) {
+                enableRest = true;
+            }
+
             int jobIdx = argList.indexOf("--job");
             if (jobIdx != -1) {
                 jobFile = new File(argList.get(jobIdx + 1));
             }
+            if (argList.contains("--singleJob")) {
+                isSingleJob = true;
+            }
+            initialize(useEmbeddedBroker, enableRest, isSingleJob, jobFile, args);
         }
         System.out.println("Starting app...");
+
+    }
+
+    public static void initialize(boolean useEmbeddedBroker, boolean enableRest, boolean isSingleJob, File jobFile, String[] args) {
+        SpringApplication app = new SpringApplication(DataSponge.class);
+        List<String> enabledProfiles = new ArrayList<>();
+        if (useEmbeddedBroker) {
+            enabledProfiles.add("broker");
+        }
+        if (enableRest) {
+            enabledProfiles.add("restapi");
+        }
+        if (enabledProfiles.size() > 0) {
+            app.setAdditionalProfiles(enabledProfiles.toArray(new String[enabledProfiles.size()]));
+        }
         ApplicationContext context = app.run(args);
-        if (jobFile != null && isServer) {
-            JobCoordinator coord = context.getBean(JobCoordinator.class);
+        JobCoordinator coord = context.getBean(JobCoordinator.class);
+        if (jobFile != null) {
             ObjectMapper mapper = new ObjectMapper();
             try {
-                coord.submitJob(mapper.readValue(jobFile, Job.class));
+                Job j = coord.submitJob(mapper.readValue(jobFile, Job.class));
+                if (j != null) {
+                    logger.info("Submitted job " + j.getGuid());
+                }
             } catch (Exception e) {
                 logger.error("Could not submit job from file", e);
             }
         }
-    }
+        if (isSingleJob) {
 
-    /**
-     * loads the property file designated by file into a Properties object and
-     * returns it to caller.
-     *
-     * @param file fully qualified file name for property file
-     * @return Properties object loaded with values from file
-     * @throws IOException
-     */
-    public static Properties loadProps(String file) throws IOException {
-        Properties props = new Properties();
-        InputStream propertyStream = new FileInputStream(file);
-        props.load(propertyStream);
-        propertyStream.close();
-        return props;
-    }
-
-    /**
-     * parses a string that contains a comma-delimited list of values and
-     * returns them as a HashSet
-     *
-     * @param list string that contains a comma-delimited list of values
-     * @return set of strings parsed from the input
-     */
-    private static HashSet<String> parseList(String list) {
-        HashSet<String> set = new HashSet<String>();
-        if (list != null) {
-            StringTokenizer strTok = new StringTokenizer(list, ",");
-            while (strTok.hasMoreTokens()) {
-                set.add(strTok.nextToken());
-            }
-        }
-        return set;
-    }
-
-    /**
-     * iterates over each entry in list and adds them to the work queue
-     *
-     * @param queue work queue of pending pages (links discovered but not yet
-     *              visited)
-     * @param list  list of urls to add to queue
-     */
-    private static void seedQueue(CrawlerWorkqueue queue, HashSet<String> list) {
-        queue.reset();
-        if (list != null) {
-            for (String item : list) {
-                queue.enqueue(item, null);
-            }
+            terminateUponCompletion(context, coord);
         }
     }
+
+    private static void printHelp() {
+        StringBuilder builder = new StringBuilder(String.format("Usage: java %s [--help] [--job <pathToJobFile>] [--server] [--singleJob] [--restapi]", DataSponge.class.getCanonicalName()));
+        builder.append("\n--help: shows this message and exits");
+        builder.append("\n--job <pathToJobFile>: automatically submits the job described by the file to the system and executes it");
+        builder.append("\n--server: indicates that this node should run the message broker. Only 1 node in an ensemble should be run with this option");
+        builder.append("\n--singleJob: indicates that the system should terminate after processing a single job");
+        System.out.println(builder.toString());
+    }
+
+    private static void terminateUponCompletion(final ApplicationContext context, final JobCoordinator coordinator) {
+        jobProgressTimer = new Timer();
+        jobProgressTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                if (coordinator.areAllJobsDone()) {
+                    ((AbstractApplicationContext) context).close();
+                    jobProgressTimer.cancel();
+                }
+            }
+        }, TERMINATE_CHECK_INTERVAL, TERMINATE_CHECK_INTERVAL);
+    }
+
 
     @Bean
     public ConnectionFactory connectionFactory() {
@@ -173,7 +181,7 @@ public class DataSponge {
     }
 
     @Bean
-    public JmsTemplate ouputJmsTemplate(){
+    public JmsTemplate ouputJmsTemplate() {
         JmsTemplate template = new JmsTemplate(connectionFactory());
         template.setDefaultDestinationName("datasponge.output.topic");
         template.setPubSubDomain(true);
@@ -215,8 +223,6 @@ public class DataSponge {
     }
 
 
-
-
     /**
      * sets additional properties (use if you need to set properties needed by
      * custom extractors/writers)
@@ -227,7 +233,6 @@ public class DataSponge {
     public void setProperty(String name, String value) {
         props.setProperty(name, value);
     }
-
 
 
     private String getJmsBrokerUrl() {

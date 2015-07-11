@@ -26,7 +26,7 @@ public class JmsDataWriter extends AbstractDataAdapter implements DataWriter {
     public static final String DESTINATION_NAME_PROP = "jmsDestination";
     public static final String JOB_ID_PROP = "jobId";
     private String destination;
-    @Resource(name="ouputJmsTemplate")
+    @Resource(name = "ouputJmsTemplate")
     private JmsTemplate outputJmsTemplate;
 
     @Override
@@ -36,7 +36,7 @@ public class JmsDataWriter extends AbstractDataAdapter implements DataWriter {
             public ObjectMessage createMessage(Session session) throws JMSException {
                 ObjectMessage message = session.createObjectMessage();
                 message.setObject(record);
-                message.setStringProperty(JOB_ID_PROP,getJobId());
+                message.setStringProperty(JOB_ID_PROP, getJobId());
                 return message;
             }
         });

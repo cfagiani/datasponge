@@ -38,6 +38,8 @@ public class PdfUtil {
 
     private static String extractText(PDDocument pdfDoc) throws IOException {
         PDFTextStripper textStripper = new PDFTextStripper();
-        return textStripper.getText(pdfDoc);
+        String text = textStripper.getText(pdfDoc);
+        pdfDoc.close();
+        return text;
     }
 }

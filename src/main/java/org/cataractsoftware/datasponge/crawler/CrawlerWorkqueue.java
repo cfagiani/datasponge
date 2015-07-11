@@ -67,6 +67,7 @@ public class
 
     /**
      * set up all the member variables used for admitting/rejecting urls.
+     *
      * @param jobId
      * @param excludeList
      * @param includes
@@ -137,7 +138,6 @@ public class
                     }
                 };
                 workQueueTemplate.send(messageCreator);
-                processedUrls.add(url);
             }
         }
     }
@@ -249,13 +249,15 @@ public class
     /**
      * called by the message listener container in response to receipt of a JMS message. This method will compare the value of the
      * target property to this node's hostId and, if it matches, will add it to the internal queue if the url hasn't already been processed.
+     *
      * @param msg
      * @param selector
      */
     @JmsListener(id = "dataspongeworkqueue", destination = "datasponge.workqueue.topic", containerFactory = "topicContainerFactory")
     public void handleWorkMessage(@Payload String msg, @Header(SELECTOR_PROP) String selector) {
         if (this.selectorVal.equals(selector)) {
-            if (!processedUrls.contains(msg)){
+            if (!processedUrls.contains(msg)) {
+                processedUrls.add(msg);
                 queue.add(msg);
             }
         }

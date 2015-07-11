@@ -19,6 +19,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 import javax.jms.JMSException;
 import javax.jms.Message;
@@ -30,7 +31,7 @@ import java.util.*;
  * in a single ensemble. In that case, the coordinator on the node to which the job was submitted is responsible for that job.
  */
 @Component
-public class JobCoordinator{
+public class JobCoordinator {
     private static final Logger logger = LoggerFactory
             .getLogger(JobCoordinator.class);
 
@@ -54,12 +55,12 @@ public class JobCoordinator{
     private ComponentFactory componentFactory;
 
     private Map<String, Job> jobMap = new HashMap<String, Job>();
-    private Map<String,DataWriter> dataWriterMap = new HashMap<String,DataWriter>();
+    private Map<String, DataWriter> dataWriterMap = new HashMap<String, DataWriter>();
     private Map<String, JobExecutor> jobExecutorMap = new HashMap<String, JobExecutor>();
     private Map<String, List<JobEnrollment>> enrollmentMap = new HashMap<String, List<JobEnrollment>>();
     private Timer jobProgressTimer;
 
-    public JobCoordinator(){
+    public JobCoordinator() {
         jobProgressTimer = new Timer();
         jobProgressTimer.schedule(new TimerTask() {
             @Override
@@ -70,7 +71,8 @@ public class JobCoordinator{
     }
 
     /**
-     * returns the status of a job indentified by the id passed in as a String.
+     * returns the status of a job identified by the id passed in as a String.
+     *
      * @param guid
      * @return
      */
@@ -84,6 +86,35 @@ public class JobCoordinator{
     }
 
     /**
+     * returns the Job domain object for the given guid (or null if not present)
+     *
+     * @param guid
+     * @return
+     */
+    public Job getJob(String guid){
+        return jobMap.get(guid);
+    }
+
+    /**
+     * returns all jobs, optionally filtered by a status
+     * @return
+     */
+    public List<Job> getAllJobs(Job.Status status){
+        List<Job> jobs = new ArrayList<>();
+        if(status != null) {
+            for (Job j : jobMap.values()) {
+                if(status == j.getStatus()){
+                    jobs.add(j);
+                }
+            }
+        }else {
+            jobs.addAll(jobMap.values());
+        }
+        return jobs;
+    }
+
+
+    /**
      * submits a job to the ensemble via a JMS message to the control topic and assigns itself as both the coordinator AND a participant in the job.
      * It will then wait for a configurable amount of time before sending the ASSIGNMENT messages (thereby assigning each participant
      * in the job an ID that is used to partition the space of urls to be crawled.)
@@ -95,8 +126,8 @@ public class JobCoordinator{
         if (j != null) {
             j.setGuid(UUID.randomUUID().toString());
             j.setCoordinatorId(HOST_ID);
-            if(j.getCoordinatorDataWriter() != null){
-                dataWriterMap.put(j.getGuid(),(DataWriter)componentFactory.getNewDataAdapter(j.getGuid(), j.getCoordinatorDataWriter()));
+            if (j.getCoordinatorDataWriter() != null) {
+                dataWriterMap.put(j.getGuid(), (DataWriter) componentFactory.getNewDataAdapter(j.getGuid(), j.getCoordinatorDataWriter()));
             }
             MessageCreator messageCreator = new MessageCreator() {
                 @Override
@@ -138,29 +169,30 @@ public class JobCoordinator{
      * flushes output for any coordinator-writers and checks for completed jobs. If a job is completed, its status is
      * updated and the executor resources are recovered.
      */
-    private void checkJobStatus(){
+    private void checkJobStatus() {
         flushOutput();
         List<String> completedJobs = new ArrayList<String>();
-        for(Map.Entry<String,JobExecutor> executorEntry: jobExecutorMap.entrySet()){
-            if(executorEntry.getValue().isDone()){
+        for (Map.Entry<String, JobExecutor> executorEntry : jobExecutorMap.entrySet()) {
+            if (executorEntry.getValue().isDone()) {
                 String jobId = executorEntry.getKey();
                 completedJobs.add(jobId);
                 DataWriter writer = dataWriterMap.get(jobId);
-                if(writer != null){
+                if (writer != null) {
                     writer.finish();
                     dataWriterMap.remove(jobId);
                 }
             }
         }
-        if(completedJobs.size()>0){
-            for(String jobId: completedJobs){
+        if (completedJobs.size() > 0) {
+            for (String jobId : completedJobs) {
                 jobExecutorMap.remove(jobId);
-                logger.info("Removed executor for job "+jobId);
+                logger.info("Removed executor for job " + jobId);
                 Job job = jobMap.get(jobId);
-                if(job != null){
+                if (job != null) {
                     job.setStatus(Job.Status.COMPLETE);
                 }
-            //TODO: need to unregister the JMS listeners
+                //TODO: need to unregister the JMS listeners
+
             }
         }
     }
@@ -168,14 +200,15 @@ public class JobCoordinator{
     /**
      * iterates over all dataWriters and flushes their output
      */
-    private void flushOutput(){
-        for(DataWriter writer: dataWriterMap.values()){
+    private void flushOutput() {
+        for (DataWriter writer : dataWriterMap.values()) {
             writer.flushBatch();
         }
     }
 
     /**
      * sends the ASSIGNMENT message on the control topic to assign an ID to each participant.
+     *
      * @param jobId
      * @param nodeId
      * @param modSize
@@ -193,6 +226,7 @@ public class JobCoordinator{
 
     /**
      * respond to job messages by enrolling.
+     *
      * @param message
      */
     @JmsListener(destination = "datasponge.job.topic", containerFactory = "topicContainerFactory")
@@ -212,6 +246,7 @@ public class JobCoordinator{
 
     /**
      * dispatches messages received on the management topic
+     *
      * @param message
      */
     @JmsListener(destination = "datasponge.management.topic", containerFactory = "topicContainerFactory")
@@ -233,6 +268,9 @@ public class JobCoordinator{
                 case HEARTBEAT:
                     //TODO: track heartbeats and re-assign node keys based on size of ensemble
                     break;
+                case ABORT:
+                    //TODO: handle abort
+                    break;
                 default:
                     break;
 
@@ -244,6 +282,7 @@ public class JobCoordinator{
 
     /**
      * records an enrollment
+     *
      * @param msg
      */
     protected void handleEnrollmentMessage(ManagementMessage msg) {
@@ -271,16 +310,17 @@ public class JobCoordinator{
      * @param record
      * @param jobId
      */
-    @JmsListener(destination="datasponge.output.topic", containerFactory = "topicContainerFactory")
-    public void handleOutputMessage(@Payload DataRecord record, @Header(JmsDataWriter.JOB_ID_PROP) String jobId){
+    @JmsListener(destination = "datasponge.output.topic", containerFactory = "topicContainerFactory")
+    public void handleOutputMessage(@Payload DataRecord record, @Header(JmsDataWriter.JOB_ID_PROP) String jobId) {
         DataWriter writer = dataWriterMap.get(jobId);
-        if(writer != null){
+        if (writer != null) {
             writer.addItem(record);
         }
     }
 
     /**
      * intializes a JobExecutor for a crawl job.
+     *
      * @param jobId
      * @param nodeId
      * @param modSize
@@ -297,6 +337,7 @@ public class JobCoordinator{
 
     /**
      * sends the enrollment message on the management topic.
+     *
      * @param jobId
      */
     protected void sendEnrollment(final String jobId) {
@@ -329,6 +370,7 @@ public class JobCoordinator{
 
     /**
      * returns true if this node is the coordinator for the job identified by the id passed in.
+     *
      * @param jobId
      * @return
      */
@@ -343,6 +385,33 @@ public class JobCoordinator{
             }
         } else {
             return false;
+        }
+    }
+
+
+    /**
+     * checks if all jobs submitted to this coordinator are complete and returns true if so.
+     * If NO jobs have yet to be submitted to this coordinator, this method will always return false.
+     *
+     * @return
+     */
+    public boolean areAllJobsDone() {
+        if (jobMap.size() > 0) {
+            for (Map.Entry<String, Job> jobEntry : jobMap.entrySet()) {
+                if (Job.Status.COMPLETE != jobEntry.getValue().getStatus()) {
+                    return false;
+                }
+            }
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    @PreDestroy
+    public void destroy() {
+        if (jobProgressTimer != null) {
+            jobProgressTimer.cancel();
         }
     }
 

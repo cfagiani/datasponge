@@ -112,11 +112,15 @@ public class SpiderThread implements Runnable {
                                 if (dataEnhancers != null) {
                                     for (DataEnhancer enhancer : dataEnhancers) {
                                         if (enhancer != null) {
-                                            dr = enhancer.enhanceData(dr);
+                                            if (dr != null) {
+                                                dr = enhancer.enhanceData(dr);
+                                            }
                                         }
                                     }
                                 }
-                                outputCollector.addItem(dr);
+                                if (dr != null) {
+                                    outputCollector.addItem(dr);
+                                }
                             }
                         }
                     }
@@ -219,7 +223,7 @@ public class SpiderThread implements Runnable {
         return null;
     }
 
-    private Page fetchPage(String url) throws IOException{
+    private Page fetchPage(String url) throws IOException {
         Page p = null;
         try {
             p = webClient.getPage(url);

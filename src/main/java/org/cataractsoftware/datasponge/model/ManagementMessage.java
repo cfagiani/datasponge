@@ -38,7 +38,7 @@ public class ManagementMessage {
     }
 
     public enum Type {
-        HEARTBEAT, ENROLLMENT, ASSIGNMENT, ACK
+        HEARTBEAT, ENROLLMENT, ASSIGNMENT, ACK, ABORT
     }
 
 

@@ -22,7 +22,8 @@ The processing pipeline for the application is as follows:
 * The DataRecords will then be passed to the DataWriter
 * If the JMSDataWriter is used, then the job should also specify a "coordinatorDataWriter". That data writer will consume off the ouptut topic and perform the actual data write.
 
-If running in "once" mode, the system will terminate once the work queue is exhausted. If running in "continuous" mode, the system will re-seed the workqueue with the start URLs after a configurable interval.
+If running in "once" mode, the job executor will terminate once the work queue is exhausted. If running in "continuous" mode, the system will re-seed the workqueue with the start URLs after a configurable interval. 
+In either case, though, the entire system remains running since additional jobs can be submitted via the REST API. 
 
 
 ###Pluggable Components
@@ -47,11 +48,17 @@ For all modes except FULLTEXT,  the DataRecord will contain fields that include 
 
 ####Included Enhancers
 * GroovyEnhancer - a shim that allows for the dynamic loading of a Groovy script
+* DeduplicationEnhancer - attempts to detect and remove duplicate data records (local to a single node)
 
-###Potential Enhancements
-* base RSS/Atom extractor
-* handle different types of binary content (xlsx, etc) for text search
-* make into a platform that can handle job submissions - this would include a simple UI for submitting new crawl jobs
+###Configuration
+####Application Properties
+The following properties can be set in a application.properties file:
+* proxyhost - http proxy to use when fetching remote pages (defaults to none)
+* proxyport - port to use for the proxy (defaults to 80; ignored if no proxyhost is set)
+* jms.broker.url - connection string to connect to message broker (defaults to vm://datasponge?create=false)
+
+####Job Config File
+The job configuration file is a well-formed JSON document described by the schema document located in the "doc" directory
 
 
 ###Differences from Version 1.0
@@ -59,4 +66,16 @@ Version 2 is significantly different from the initial release. The highlights of
 * Jobs are now configured via a JSON file
 * There is a RESTful API for submitting and querying job status
 * Properties can be overridden by creating application.properties in a "config" directory under the directory where the app is installed
+* The job can be run on an ensemble of hosts by running multiple instances of datasponge connecting to a single message broker
+
+###Potential Enhancements and TODOs
+* better error handling for the REST API including validation
+* stand-alone job validation tool (schema validation?)
+* heartbeats and node-reassignments when nodes fail
+* base RSS/Atom extractor
+* handle different types of binary content (xlsx, etc) for text search
+* UI for submitting/monitoring crawl jobs
+* ability to abort jobs
+* more tests
+* ability to load class files(for custom DataAdatpers) from external jars/locations 
 
