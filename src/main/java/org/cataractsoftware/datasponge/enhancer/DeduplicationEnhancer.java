@@ -18,6 +18,8 @@ import java.util.Set;
  * can be made by changing the implementation of equals for DataRecord and/or by setting the customDetector
  * property on the plugin config (in the job configuration) to the fully-qualified name of a DuplicateDetector instance.
  *
+ * TODO: update to only cache SHA-256 hash of the record instead of the whole thing
+ *
  * @author Christopher Fagiani
  */
 public class DeduplicationEnhancer implements DataEnhancer, DuplicateDetector {

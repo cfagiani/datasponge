@@ -107,8 +107,12 @@ public class DataSponge {
                 isSingleJob = true;
             }
             initialize(useEmbeddedBroker, enableRest, isSingleJob, jobFile, args);
+        }else{
+            System.out.println("Bad command line arguments\n");
+            printHelp();
+            System.exit(1);
         }
-        System.out.println("Starting app...");
+
 
     }
 

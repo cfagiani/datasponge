@@ -89,7 +89,14 @@ public class
         }
         this.nodeId = nodeId;
         this.modSize = modSize;
-        this.selectorVal = jobId + "-" + nodeId;
+        updateSelector();
+    }
+
+    /**
+     * sets the value to use for jms selectors
+     */
+    private void updateSelector(){
+        this.selectorVal = this.jobId + "-"+this.nodeId;
     }
 
     /**
@@ -243,6 +250,23 @@ public class
             item = null;
         }
         return item;
+    }
+
+    /**
+     * respond to node failures by adjusting the selector used to determine which messages should be handled by this node.
+     * @param failedNodeId
+     * @return - true if the failed node is THIS node, false if not
+     */
+    public synchronized boolean handleNodeFailure(int failedNodeId) {
+        if(this.nodeId == failedNodeId){
+            return true;
+        }
+        if(this.nodeId> failedNodeId){
+            this.nodeId--;
+            updateSelector();
+        }
+        this.modSize--;
+        return false;
     }
 
 

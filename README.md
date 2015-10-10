@@ -2,7 +2,7 @@ datasponge
 ==========
 
 A toolkit for crawling the web and extracting information that can be run on a single host or distributed across multiple hosts (for scalability).
-This is a SpringBoot application that can use an embedded ActiveMQ JMS broker (or optionally an external broker). 
+This is a Spring Boot application that can use an embedded ActiveMQ JMS broker (or optionally an external broker). 
 
 ###Overview
 The Data Sponge provides a mechanism for performing a targeted crawl of a set of websites rooted at one or more URLs. The bulk of the configuration is stored in a JobDefinition JSON document (a sample of which can be found in the test/resources directory).
@@ -38,6 +38,7 @@ The system has a pluggable architecture that allows users to easily specify thei
     * LAST - finds the last occurrence of the string
     * FULLTEXT - determines if the page contains the string
 * PdfTextExtractor - this extractor will output a single DataRecord per PDF document (the text will be in a field called "text" within the data record)
+* DirectoryExtractor - crawls a local file system recursively and emits DataRecords for each file 
 
 For all modes except FULLTEXT,  the DataRecord will contain fields that include the index of the match within the body and the context (the match plus a configurable number of characters before/after). For FULLTEXT, the record will contain the entire body of the page.
 
@@ -50,6 +51,9 @@ For all modes except FULLTEXT,  the DataRecord will contain fields that include 
 * GroovyEnhancer - a shim that allows for the dynamic loading of a Groovy script
 * DeduplicationEnhancer - attempts to detect and remove duplicate data records (local to a single node)
 
+###Prerequisites
+* JRE 1.7 or higher
+
 ###Configuration
 ####Application Properties
 The following properties can be set in a application.properties file:
@@ -59,6 +63,16 @@ The following properties can be set in a application.properties file:
 
 ####Job Config File
 The job configuration file is a well-formed JSON document described by the schema document located in the "doc" directory
+
+
+###Failures
+If a node fails, so long as it is not the coordinator for that job, the remaining nodes will be notified and will split the responsibility for processing the data that was destined for the failed node. It is possible
+that some pages within the crawl (anything accepted by the node prior to failure but not yet processed) will not be crawled.
+
+If the coordinator fails, the job may be contining to run on the other nodes in the ensemble. If this is the case, their local output will still be written but
+any data destined for the executor on the coordinator will not be processed. Similarly, if the job was running with a coordinatorDataWriter set, this will not be running.
+
+As of now, once a node is failed, it stays failed. There is no facility to re-join a job that is in progress.
 
 
 ###Differences from Version 1.0
@@ -71,11 +85,12 @@ Version 2 is significantly different from the initial release. The highlights of
 ###Potential Enhancements and TODOs
 * better error handling for the REST API including validation
 * stand-alone job validation tool (schema validation?)
-* heartbeats and node-reassignments when nodes fail
 * base RSS/Atom extractor
 * handle different types of binary content (xlsx, etc) for text search
 * UI for submitting/monitoring crawl jobs
-* ability to abort jobs
 * more tests
-* ability to load class files(for custom DataAdatpers) from external jars/locations 
-
+* ability to load class files(for custom DataAdatpers) from external jars/locations
+* ability to join (or re-join) a job in progress
+* ability to recover from coordinator failures
+* pluggable mechanism to "fetch Pages" in SpiderThread (thus allowing non-web/filesystem extraction jobs)
+* piggyback heartbeats on other messages and only send HB if needed

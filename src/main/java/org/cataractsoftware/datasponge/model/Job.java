@@ -154,7 +154,7 @@ public class Job {
     }
 
     public enum Status {
-        SUBMITTED, PROCESSING, COMPLETE
+        SUBMITTED, PROCESSING, NODE_COMPLETE, COMPLETE, ABORTED
     }
 
     public enum Mode {

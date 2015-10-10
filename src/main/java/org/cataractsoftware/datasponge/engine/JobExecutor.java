@@ -16,9 +16,7 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * This bean is responsible for executing a crawl job on a single host. It is a prototype bean that is initialized in response
@@ -172,6 +170,15 @@ public class JobExecutor {
             t.start();
         }
         return threadList;
+    }
+
+    /**
+     * handles node failures. Returns true if the nodeId passed in corresponds to this node
+     * @param nodeId
+     * @return
+     */
+    public boolean handleNodeFailure(int nodeId){
+        return workQueue.handleNodeFailure(nodeId);
     }
 
     /**

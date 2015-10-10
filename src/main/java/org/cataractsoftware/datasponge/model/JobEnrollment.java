@@ -1,7 +1,5 @@
 package org.cataractsoftware.datasponge.model;
 
-import java.util.Date;
-
 /**
  * data structure used to have a server enroll in a crawl job
  *
@@ -11,7 +9,8 @@ public class JobEnrollment {
 
     private String jobId;
     private String hostId;
-    private Date lastHeartbeat;
+    private long lastHeartbeat=0l;
+    private boolean complete = false;
 
     public JobEnrollment() {
 
@@ -38,12 +37,20 @@ public class JobEnrollment {
         this.hostId = hostId;
     }
 
-    public Date getLastHeartbeat() {
+    public long getLastHeartbeat() {
         return lastHeartbeat;
     }
 
-    public void setLastHeartbeat(Date lastHeartbeat) {
+    public void setLastHeartbeat(long lastHeartbeat) {
         this.lastHeartbeat = lastHeartbeat;
+    }
+
+    public boolean isComplete() {
+        return complete;
+    }
+
+    public void setComplete(boolean complete) {
+        this.complete = complete;
     }
 
     @Override

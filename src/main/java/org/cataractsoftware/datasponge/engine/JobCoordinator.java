@@ -5,7 +5,6 @@ import org.cataractsoftware.datasponge.DataRecord;
 import org.cataractsoftware.datasponge.model.Job;
 import org.cataractsoftware.datasponge.model.JobEnrollment;
 import org.cataractsoftware.datasponge.model.ManagementMessage;
-import org.cataractsoftware.datasponge.model.ManagementMessage.Type;
 import org.cataractsoftware.datasponge.util.ComponentFactory;
 import org.cataractsoftware.datasponge.writer.DataWriter;
 import org.cataractsoftware.datasponge.writer.JmsDataWriter;
@@ -25,6 +24,7 @@ import javax.jms.JMSException;
 import javax.jms.Message;
 import javax.jms.Session;
 import java.util.*;
+import java.util.Map.Entry;
 
 /**
  * This component is responsible for coordination of any jobs. If running in a multi-node setup, there could be multiple coordinators
@@ -35,29 +35,25 @@ public class JobCoordinator {
     private static final Logger logger = LoggerFactory
             .getLogger(JobCoordinator.class);
 
-    private static final long OUTPUT_FLUSH_INTERVAL = 3000;
+    private static final long OUTPUT_FLUSH_INTERVAL = 10000;
+    private static final long FAILURE_INTERVAL = 60000;
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final int WAIT_TIME_SECS = 10;
-    private static final String UNKNOWN_JOB_MSG = "UNKNOWN_JOB";
-    private static final String HOST_KEY = "host";
 
-    private static final String NODE_KEY = "nodeId";
-    private static final String SIZE_KEY = "modSize";
-    private static final String HOST_ID = UUID.randomUUID().toString();
 
     @Resource(name = "jobTopicTemplate")
     private JmsTemplate jobTopicTemplate;
 
-    @Resource(name = "managementTopicTemplate")
-    private JmsTemplate managementTopicTemplate;
+    @Autowired
+    private ManagementMessageSender managementMessageSender;
 
     @Autowired
     private ComponentFactory componentFactory;
 
-    private Map<String, Job> jobMap = new HashMap<String, Job>();
-    private Map<String, DataWriter> dataWriterMap = new HashMap<String, DataWriter>();
-    private Map<String, JobExecutor> jobExecutorMap = new HashMap<String, JobExecutor>();
-    private Map<String, List<JobEnrollment>> enrollmentMap = new HashMap<String, List<JobEnrollment>>();
+    private volatile Map<String, Job> jobMap = new HashMap<String, Job>();
+    private volatile Map<String, DataWriter> dataWriterMap = new HashMap<String, DataWriter>();
+    private volatile Map<String, JobExecutor> jobExecutorMap = new HashMap<String, JobExecutor>();
+    private volatile Map<String, List<JobEnrollment>> enrollmentMap = new HashMap<String, List<JobEnrollment>>();
     private Timer jobProgressTimer;
 
     public JobCoordinator() {
@@ -65,25 +61,12 @@ public class JobCoordinator {
         jobProgressTimer.schedule(new TimerTask() {
             @Override
             public void run() {
-                checkJobStatus();
+                updateJobStatus();
             }
         }, OUTPUT_FLUSH_INTERVAL, OUTPUT_FLUSH_INTERVAL);
     }
 
-    /**
-     * returns the status of a job identified by the id passed in as a String.
-     *
-     * @param guid
-     * @return
-     */
-    public String getJobStatus(String guid) {
-        Job j = jobMap.get(guid);
-        if (j != null) {
-            return j.getStatus().toString();
-        } else {
-            return UNKNOWN_JOB_MSG;
-        }
-    }
+
 
     /**
      * returns the Job domain object for the given guid (or null if not present)
@@ -125,7 +108,7 @@ public class JobCoordinator {
     public Job submitJob(final Job j) {
         if (j != null) {
             j.setGuid(UUID.randomUUID().toString());
-            j.setCoordinatorId(HOST_ID);
+            j.setCoordinatorId(ManagementMessageSender.HOST_ID);
             if (j.getCoordinatorDataWriter() != null) {
                 dataWriterMap.put(j.getGuid(), (DataWriter) componentFactory.getNewDataAdapter(j.getGuid(), j.getCoordinatorDataWriter()));
             }
@@ -146,16 +129,18 @@ public class JobCoordinator {
                 }
             };
             jobTopicTemplate.send(messageCreator);
-            sendEnrollment(j.getGuid());
+            managementMessageSender.sendEnrollment(j.getGuid());
             Timer timer = new Timer();
             timer.schedule(new TimerTask() {
                 @Override
                 public void run() {
-                    List<JobEnrollment> enrollments = enrollmentMap.get(j
-                            .getGuid());
-                    if (enrollments != null) {
-                        for (int i = 0; i < enrollments.size(); i++) {
-                            sendAssignment(j.getGuid(), i, enrollments.size());
+                    synchronized(enrollmentMap) {
+                        List<JobEnrollment> enrollments = enrollmentMap.get(j
+                                .getGuid());
+                        if (enrollments != null) {
+                            for (int i = 0; i < enrollments.size(); i++) {
+                                managementMessageSender.sendAssignment(j.getGuid(), i, enrollments.size());
+                            }
                         }
                     }
                 }
@@ -169,18 +154,44 @@ public class JobCoordinator {
      * flushes output for any coordinator-writers and checks for completed jobs. If a job is completed, its status is
      * updated and the executor resources are recovered.
      */
-    private void checkJobStatus() {
+    protected void updateJobStatus() {
         flushOutput();
+        checkLocalCompletion();
+        checkGlobalCompletion();
+        checkForFailures();
+    }
+
+    /**
+     * if on the job coordinator, checks for any nodes with the lastHearbeat > FAILURE_INTERVAL
+     */
+    protected synchronized void checkForFailures(){
+        for(Entry<String,List<JobEnrollment>> enrollmentEntry: enrollmentMap.entrySet()){
+            if(isJobCoordinator(enrollmentEntry.getKey())) {
+                for (JobEnrollment enrollment : enrollmentEntry.getValue()) {
+                    if(enrollment.getLastHeartbeat()> 0) {
+                        if(System.currentTimeMillis() - enrollment.getLastHeartbeat() > FAILURE_INTERVAL){
+                            managementMessageSender.sendFailure(enrollment.getJobId(),enrollment.getHostId());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    /**
+     * checks if the local executor for a job is complete. If so, it sends a complete management message, otherwise it sends
+     * a heartbeat message. If the executor is complete, the executor bean will be destroyed.
+     */
+    protected void checkLocalCompletion(){
         List<String> completedJobs = new ArrayList<String>();
         for (Map.Entry<String, JobExecutor> executorEntry : jobExecutorMap.entrySet()) {
+            String jobId = executorEntry.getKey();
             if (executorEntry.getValue().isDone()) {
-                String jobId = executorEntry.getKey();
                 completedJobs.add(jobId);
-                DataWriter writer = dataWriterMap.get(jobId);
-                if (writer != null) {
-                    writer.finish();
-                    dataWriterMap.remove(jobId);
-                }
+                managementMessageSender.sendComplete(jobId);
+            } else {
+                managementMessageSender.sendHeartbeat(jobId);
             }
         }
         if (completedJobs.size() > 0) {
@@ -189,7 +200,7 @@ public class JobCoordinator {
                 logger.info("Removed executor for job " + jobId);
                 Job job = jobMap.get(jobId);
                 if (job != null) {
-                    job.setStatus(Job.Status.COMPLETE);
+                    job.setStatus(Job.Status.NODE_COMPLETE);
                 }
                 //TODO: need to unregister the JMS listeners
 
@@ -197,32 +208,57 @@ public class JobCoordinator {
         }
     }
 
+
+    /**
+     * checks if we have recived COMPLETE messages for all enrollments for a job. If so, the job is marked complete.
+     * For jobs with a coordinatorDataWriter configured, the finish method will be called on the writer upon executor completion
+     */
+    protected synchronized void checkGlobalCompletion(){
+        List<String> completedJobs = new ArrayList<String>();
+       for(Map.Entry<String,List<JobEnrollment>> enrollmentEntry: enrollmentMap.entrySet()){
+            if(enrollmentEntry.getValue()!=null){
+                boolean allComplete = true;
+                for(JobEnrollment e: enrollmentEntry.getValue()){
+                    if(!e.isComplete()){
+                        allComplete = false;
+                        break;
+                    }
+                }
+                if(allComplete) {
+                    //if we're here, then all nodes have reported completion;
+                    DataWriter writer = dataWriterMap.get(enrollmentEntry.getKey());
+                    if (writer != null) {
+                        writer.finish();
+                        dataWriterMap.remove(enrollmentEntry.getKey());
+                    }
+                    Job job = jobMap.get(enrollmentEntry.getKey());
+                    if (job != null) {
+                        job.setStatus(Job.Status.COMPLETE);
+                    }
+                    //can also clean up enrollment map
+                    completedJobs.add(enrollmentEntry.getKey());
+                }
+            }
+
+        }
+        if(completedJobs.size()>0){
+            for(String jobId: completedJobs){
+                enrollmentMap.remove(jobId);
+            }
+        }
+    }
+
+
     /**
      * iterates over all dataWriters and flushes their output
      */
-    private void flushOutput() {
+    protected void flushOutput() {
         for (DataWriter writer : dataWriterMap.values()) {
             writer.flushBatch();
         }
     }
 
-    /**
-     * sends the ASSIGNMENT message on the control topic to assign an ID to each participant.
-     *
-     * @param jobId
-     * @param nodeId
-     * @param modSize
-     */
-    private void sendAssignment(String jobId, int nodeId, int modSize) {
-        ManagementMessage assignmentMessage = new ManagementMessage();
-        assignmentMessage.setJobId(jobId);
-        assignmentMessage.setType(Type.ASSIGNMENT);
-        Map<String, String> data = new HashMap<String, String>();
-        data.put(NODE_KEY, nodeId + "");
-        data.put(SIZE_KEY, modSize + "");
-        assignmentMessage.setData(data);
-        managementTopicTemplate.send(buildMessageCreator(assignmentMessage));
-    }
+
 
     /**
      * respond to job messages by enrolling.
@@ -237,7 +273,7 @@ public class JobCoordinator {
                 // if we don't already know about this job
                 jobMap.put(job.getGuid(), job);
                 //TODO: perform check to ensure this node can handle the job (i.e. no ClassNotFoundException when instantiating DataAdapters)
-                sendEnrollment(job.getGuid());
+                managementMessageSender.sendEnrollment(job.getGuid());
             }
         } catch (Exception e) {
             throw new RuntimeException("Could not process job message", e);
@@ -246,7 +282,6 @@ public class JobCoordinator {
 
     /**
      * dispatches messages received on the management topic
-     *
      * @param message
      */
     @JmsListener(destination = "datasponge.management.topic", containerFactory = "topicContainerFactory")
@@ -260,23 +295,87 @@ public class JobCoordinator {
                     break;
                 case ASSIGNMENT:
                     initializeEngineForJob(msg.getJobId(),
-                            Integer.parseInt(msg.getData().get(NODE_KEY)),
-                            Integer.parseInt(msg.getData().get(SIZE_KEY)),
+                            Integer.parseInt(msg.getData().get(ManagementMessageSender.NODE_KEY)),
+                            Integer.parseInt(msg.getData().get(ManagementMessageSender.SIZE_KEY)),
                             isJobCoordinator(msg.getJobId()));
-
                     break;
                 case HEARTBEAT:
-                    //TODO: track heartbeats and re-assign node keys based on size of ensemble
+                    updateEnrollment(msg, false);
                     break;
                 case ABORT:
-                    //TODO: handle abort
+                    handleAbort(msg.getJobId());
+                    break;
+                case COMPLETE:
+                    updateEnrollment(msg,true);
+                    break;
+                case NODE_FAILURE:
+                    handleFailure(msg.getJobId(),Integer.parseInt(msg.getData().get(ManagementMessageSender.NODE_KEY)));
                     break;
                 default:
+                    logger.error("Unknown control message type: "+msg.getType());
                     break;
 
             }
         } catch (Exception e) {
             throw new RuntimeException("Could not process job message", e);
+        }
+    }
+
+    /**
+     * handles the failure of a node by updating the executor so it can adjust its share of the workqueue
+     * @param jobId
+     * @param nodeId
+     */
+    protected void handleFailure(String jobId, int nodeId){
+        JobExecutor executor = jobExecutorMap.get(jobId);
+        if(executor!=null){
+           if(executor.handleNodeFailure(nodeId)){
+               //if the node that failed is this node,then the coordinator must not be getting our messages so we can terminates
+               handleAbort(jobId);
+           }
+        }
+    }
+
+
+    /**
+     * handles an abort by shutting down the executor for the job and flushing anything pending
+     * @param msg
+     */
+    protected synchronized void handleAbort(String jobId){
+        JobExecutor executor = jobExecutorMap.get(jobId);
+
+        if(executor != null){
+            logger.info("Aborting job "+jobId);
+            executor.destroy();
+            jobExecutorMap.remove(jobId);
+        }
+        if(dataWriterMap.get(jobId) !=null){
+            dataWriterMap.get(jobId).finish();
+            dataWriterMap.remove(jobId);
+        }
+        Job j = jobMap.get(jobId);
+        if(j != null){
+            j.setStatus(Job.Status.ABORTED);
+        }
+    }
+
+    /**
+     * updates the heartbeat timestamp on the enrollment
+     * @param msg
+     */
+    protected void updateEnrollment(ManagementMessage msg, boolean isComplete){
+        String jobId = msg.getJobId();
+        List<JobEnrollment> enrollments = enrollmentMap.get(jobId);
+        if(enrollments != null){
+            for(JobEnrollment e: enrollments){
+                if(ManagementMessageSender.HOST_ID.equals(e.getHostId())){
+                    if(isComplete){
+                        e.setComplete(true);
+                    }else {
+                        e.setLastHeartbeat(System.currentTimeMillis());
+                    }
+                }
+            }
         }
     }
 
@@ -297,8 +396,7 @@ public class JobCoordinator {
                 enrollments = new ArrayList<JobEnrollment>();
                 enrollmentMap.put(jobId, enrollments);
             }
-            JobEnrollment enrollment = new JobEnrollment(jobId, msg.getData()
-                    .get(HOST_KEY));
+            JobEnrollment enrollment = new JobEnrollment(jobId, msg.getSenderHostId());
             enrollments.add(enrollment);
         }
     }
@@ -335,38 +433,7 @@ public class JobCoordinator {
         executor.executeCrawl();
     }
 
-    /**
-     * sends the enrollment message on the management topic.
-     *
-     * @param jobId
-     */
-    protected void sendEnrollment(final String jobId) {
-        ManagementMessage msg = new ManagementMessage();
-        msg.setType(Type.ENROLLMENT);
-        msg.setJobId(jobId);
-        Map<String, String> payload = new HashMap<String, String>();
-        payload.put(HOST_KEY, HOST_ID);
-        msg.setData(payload);
-        managementTopicTemplate.send(buildMessageCreator(msg));
-    }
 
-    protected MessageCreator buildMessageCreator(final ManagementMessage msg) {
-        return new MessageCreator() {
-            @Override
-            public Message createMessage(Session session) throws JMSException {
-                try {
-                    Message m = session.createTextMessage(mapper
-                            .writeValueAsString(msg));
-
-                    return m;
-                } catch (Exception e) {
-                    logger.error("Could not publish json message", e);
-                    throw new JMSException("Could not publish message: "
-                            + e.getMessage());
-                }
-            }
-        };
-    }
 
     /**
      * returns true if this node is the coordinator for the job identified by the id passed in.
@@ -378,7 +445,7 @@ public class JobCoordinator {
         if (jobId != null) {
             Job j = jobMap.get(jobId);
             if (j != null && j.getCoordinatorId() != null
-                    && this.HOST_ID.equals(j.getCoordinatorId())) {
+                    && ManagementMessageSender.HOST_ID.equals(j.getCoordinatorId())) {
                 return true;
             } else {
                 return false;
@@ -398,12 +465,26 @@ public class JobCoordinator {
     public boolean areAllJobsDone() {
         if (jobMap.size() > 0) {
             for (Map.Entry<String, Job> jobEntry : jobMap.entrySet()) {
-                if (Job.Status.COMPLETE != jobEntry.getValue().getStatus()) {
+                if (Job.Status.COMPLETE != jobEntry.getValue().getStatus() && Job.Status.ABORTED != jobEntry.getValue().getStatus()) {
                     return false;
                 }
             }
             return true;
         } else {
+            return false;
+        }
+    }
+
+    /**
+     * sends the abort control message on the management topic
+     * @param jobId
+     * @return
+     */
+    public boolean abortJob(String jobId){
+        if(jobMap.get(jobId)!=null){
+            managementMessageSender.sendAbort(jobId);
+            return true;
+        }else{
             return false;
         }
     }

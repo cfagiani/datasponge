@@ -92,7 +92,9 @@
         "enum": [
           "SUBMITTED",
           "PROCESSING",
-          "COMPLETE"
+          "NODE_COMPLETE",
+          "COMPLETE",
+          "ABORTED"
         ]
       },
       "description": "Status of this job."

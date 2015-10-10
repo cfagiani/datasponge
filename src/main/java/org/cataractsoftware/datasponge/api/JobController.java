@@ -34,6 +34,19 @@ public class JobController {
     }
 
     /**
+     * aborts a job identified by the id
+     *
+     * @param id
+     * @return
+     */
+    @RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
+    @ResponseBody
+    public boolean abortJob(@PathVariable("id") String id) {
+        return coordinator.abortJob(id);
+    }
+
+
+    /**
      * submits a job for processing
      *
      * @param job
