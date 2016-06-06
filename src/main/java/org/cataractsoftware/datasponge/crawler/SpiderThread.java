@@ -227,9 +227,9 @@ public class SpiderThread implements Runnable {
         Page p = null;
         try {
             p = webClient.getPage(url);
-        } catch (RuntimeException rEx) {
+        } catch (Throwable rEx) {
             logger.warn(
-                    "Could not load page with normal client. Trying backup");
+                    "Could not load page {} with normal client. Trying backup", url);
             p = backupWebClient.getPage(url);
         }
         return p;
