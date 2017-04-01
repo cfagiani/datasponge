@@ -19,7 +19,7 @@ import java.util.Properties;
  *
  * @author Christopher Fagiani
  */
-public class CSVFileWriter extends AbstractDataWriter {
+public class CsvFileWriter extends AbstractDataWriter {
 
     private static final String FILENAME = "csvwriter.filename";
     private static final String MODE = "csvwriter.mode";
@@ -42,7 +42,7 @@ public class CSVFileWriter extends AbstractDataWriter {
         String headerString = props.getProperty(FIELDS);
         delimiter = props.getProperty(DELIM, ",");
         if (headerString == null || headerString.trim().length() == 0) {
-            throw new IllegalStateException(FIELDS + " must be non-empty in the property file when using CSVFileWriter");
+            throw new IllegalStateException(FIELDS + " must be non-empty in the property file when using CsvFileWriter");
         }
         fieldsToWrite = Arrays.asList(headerString.split(";"));
         try {
@@ -51,7 +51,7 @@ public class CSVFileWriter extends AbstractDataWriter {
                 writer.write(headerString.replaceAll(";", delimiter) + "\n");
             }
         } catch (Exception e) {
-            throw new IllegalStateException("Could not configure CSVFileWriter", e);
+            throw new IllegalStateException("Could not configure CsvFileWriter", e);
         }
     }
 

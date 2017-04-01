@@ -185,7 +185,7 @@ public class DataSponge {
     }
 
     @Bean
-    public JmsTemplate ouputJmsTemplate() {
+    public JmsTemplate outputJmsTemplate() {
         JmsTemplate template = new JmsTemplate(connectionFactory());
         template.setDefaultDestinationName("datasponge.output.topic");
         template.setPubSubDomain(true);

@@ -26,7 +26,7 @@ public class JmsDataWriter extends AbstractDataAdapter implements DataWriter {
     public static final String DESTINATION_NAME_PROP = "jmsDestination";
     public static final String JOB_ID_PROP = "jobId";
     private String destination;
-    @Resource(name = "ouputJmsTemplate")
+    @Resource(name = "outputJmsTemplate")
     private JmsTemplate outputJmsTemplate;
 
     @Override

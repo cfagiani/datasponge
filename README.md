@@ -4,7 +4,7 @@ datasponge
 A toolkit for crawling the web and extracting information that can be run on a single host or distributed across multiple hosts (for scalability).
 This is a Spring Boot application that can use an embedded ActiveMQ JMS broker (or optionally an external broker). 
 
-###Overview
+### Overview
 The Data Sponge provides a mechanism for performing a targeted crawl of a set of websites rooted at one or more URLs. The bulk of the configuration is stored in a JobDefinition JSON document (a sample of which can be found in the test/resources directory).
 
 The processing pipeline for the application is as follows:
@@ -26,10 +26,10 @@ If running in "once" mode, the job executor will terminate once the work queue i
 In either case, though, the entire system remains running since additional jobs can be submitted via the REST API. 
 
 
-###Pluggable Components
+### Pluggable Components
 The system has a pluggable architecture that allows users to easily specify their own DataExtractors, DataEnhancers and DataWriters. In addition to the base classes the define the core functionality, there are a number of components that are included out-of-the-box.
 
-####Included Extractors
+#### Included Extractors
 * GroovyExtractor - this extractor is a shim that allows for the dynamic loading of a Groovy script.
 * HyperlinkExtractor - this extractor will output a single DataRecord per page that has a field entry for every hyperlink on an HTML page.
 * TextSearchExtractor - this extractor will parse the page content as text and attempt to find a search string on the page. The search can be case sensitive or insensitive and has 3 modes: 
@@ -42,30 +42,31 @@ The system has a pluggable architecture that allows users to easily specify thei
 
 For all modes except FULLTEXT,  the DataRecord will contain fields that include the index of the match within the body and the context (the match plus a configurable number of characters before/after). For FULLTEXT, the record will contain the entire body of the page.
 
-####Included Writers
+#### Included Writers
 * PrintWriter - simply prints the DataRecord to Standard Output. This is primary for debugging.
-* CSVFileWriter - writes DataRecords as a CSV file. Based on configuration options, this writer can either append or overwrite files and will include/suppress a header row.
+* CsvFileWriter - writes DataRecords as a CSV file. Based on configuration options, this writer can either append or overwrite files and will include/suppress a header row.
 * JMSDataWriter - publishes DataRecords to a JMS topic
+* JdbcDataWriter - allows for insertion of data into a JDBC datasource. This is an abstract writer where subclasses can supply whatever mapping from DataRecords to db records they desire.
 
-####Included Enhancers
+#### Included Enhancers
 * GroovyEnhancer - a shim that allows for the dynamic loading of a Groovy script
 * DeduplicationEnhancer - attempts to detect and remove duplicate data records (local to a single node)
 
-###Prerequisites
+### Prerequisites
 * JRE 1.7 or higher
 
-###Configuration
-####Application Properties
+### Configuration
+#### Application Properties
 The following properties can be set in a application.properties file:
 * proxyhost - http proxy to use when fetching remote pages (defaults to none)
 * proxyport - port to use for the proxy (defaults to 80; ignored if no proxyhost is set)
 * jms.broker.url - connection string to connect to message broker (defaults to vm://datasponge?create=false)
 
-####Job Config File
+#### Job Config File
 The job configuration file is a well-formed JSON document described by the schema document located in the "doc" directory
 
 
-###Failures
+### Failures
 If a node fails, so long as it is not the coordinator for that job, the remaining nodes will be notified and will split the responsibility for processing the data that was destined for the failed node. It is possible
 that some pages within the crawl (anything accepted by the node prior to failure but not yet processed) will not be crawled.
 
@@ -75,14 +76,14 @@ any data destined for the executor on the coordinator will not be processed. Sim
 As of now, once a node is failed, it stays failed. There is no facility to re-join a job that is in progress.
 
 
-###Differences from Version 1.0
+### Differences from Version 1.0
 Version 2 is significantly different from the initial release. The highlights of the differences are as follows:
 * Jobs are now configured via a JSON file
 * There is a RESTful API for submitting and querying job status
 * Properties can be overridden by creating application.properties in a "config" directory under the directory where the app is installed
 * The job can be run on an ensemble of hosts by running multiple instances of datasponge connecting to a single message broker
 
-###Potential Enhancements and TODOs
+### Potential Enhancements and TODOs
 * better error handling for the REST API including validation
 * stand-alone job validation tool (schema validation?)
 * base RSS/Atom extractor

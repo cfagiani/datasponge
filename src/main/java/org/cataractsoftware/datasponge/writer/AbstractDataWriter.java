@@ -7,7 +7,8 @@ import java.util.HashSet;
 import java.util.Properties;
 
 /**
- * Base class for data writers. Most custom DataWriter implementations should extend this class. It handles keeping a thread-safe collection of DataRecords that have yet to be written and
+ * Base class for data writers. Most custom DataWriter implementations should extend this class. It handles keeping a
+ * thread-safe collection of DataRecords that have yet to be written and
  * will flush them whenever the flushBatch method is run.
  *
  * @author Christopher Fagiani
@@ -32,8 +33,10 @@ public abstract class AbstractDataWriter extends AbstractDataAdapter implements 
      *
      * @param record DataRecord instance to add to write list
      */
-    public synchronized void addItem(DataRecord record) {
-        dataRecordSet.add(record);
+    public void addItem(DataRecord record) {
+        synchronized (dataRecordSet) {
+            dataRecordSet.add(record);
+        }
     }
 
     /**
@@ -57,7 +60,8 @@ public abstract class AbstractDataWriter extends AbstractDataAdapter implements 
     }
 
     /**
-     * this method will be called for each item in a batch when flushBatch is called. Most implementations should write that item to the output
+     * this method will be called for each item in a batch when flushBatch is called.
+     * Most implementations should write that item to the output
      *
      * @param record record instance to write
      */
@@ -65,7 +69,8 @@ public abstract class AbstractDataWriter extends AbstractDataAdapter implements 
 
 
     /**
-     * lifecycle method called just before starting a batch (before the first call to writeItem). Override this method if any set-up is required prior to writing a batch.
+     * lifecycle method called just before starting a batch (before the first call to writeItem).
+     * Override this method if any set-up is required prior to writing a batch.
      */
     protected void startBatch() {
         //no-op
@@ -73,7 +78,8 @@ public abstract class AbstractDataWriter extends AbstractDataAdapter implements 
 
 
     /**
-     * lifecycle method called just after finishing a batch (after the last call to writeItem). Override this method if any clean-up/commit logic needs to be performed for a batch
+     * lifecycle method called just after finishing a batch (after the last call to writeItem).
+     * Override this method if any clean-up/commit logic needs to be performed for a batch
      */
     protected void completeBatch() {
         //no-op
