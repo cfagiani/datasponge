@@ -90,9 +90,9 @@ Version 2 is significantly different from the initial release. The highlights of
 * handle different types of binary content (xlsx, etc) for text search
 * UI for submitting/monitoring crawl jobs
 * more tests
-* ability to load class files(for custom DataAdatpers) from external jars/locations
+* ability to load class files(for custom DataAdapters) from external jars/locations
 * ability to join (or re-join) a job in progress
 * ability to recover from coordinator failures
 * pluggable mechanism to track "seen pages" to handle massive crawls
-* pluggable mechanism to "fetch Pages" in SpiderThread (thus allowing non-web/filesystem extraction jobs)
+* pluggable mechanism to fetch pages in SpiderThread (thus allowing non-web/filesystem extraction jobs)
 * piggyback heartbeats on other messages and only send HB if needed
